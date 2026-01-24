@@ -83,8 +83,6 @@ Face recognition for automatic elderly identification
 
 Activity pattern analysis
 
-Voice assistant integration
-
 Mobile app notifications
 
 Cloud analytics & reporting
