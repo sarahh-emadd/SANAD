@@ -1,92 +1,133 @@
-# SANAD
+# SANAD - Smart Elderly Care System
+
 Sanad is a smart elderly care system designed to support seniors living independently while giving caregivers peace of mind. The system combines IoT devices, AI-powered computer vision, and a cloud-based backend to monitor daily activities, detect emergencies, and ensure medication adherence — all in a respectful, non-intrusive way.
 
+## 📁 Monorepo Structure
+```
+SANAD/
+├── server/              # Backend API (Node.js/Express)
+│   ├── config/
+│   ├── models/
+│   ├── routes/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── services/
+│   └── server.js
+├── mobile/              # Mobile App (Flutter)
+│   ├── lib/
+│   │   ├── config/
+│   │   ├── models/
+│   │   ├── screens/
+│   │   ├── services/
+│   │   ├── widgets/
+│   │   └── main.dart
+│   └── pubspec.yaml
+├── package.json         # Root scripts
+└── README.md
+```
 
-# Key Features
-👁️ AI Camera Monitoring
+## 🚀 Getting Started
 
-Real-time human detection and tracking using YOLOv8
+### Prerequisites
+- Node.js & npm
+- Flutter SDK
+- Database (PostgreSQL/MongoDB)
 
-Elderly selection & ID locking to avoid false alerts when others are present
+### Installation
+```bash
+# Install all dependencies
+npm run install:all
 
-Fall detection based on motion, posture, and temporal analysis
+# Or install individually
+npm run install:server    # Backend only
+npm run install:mobile    # Mobile only
+```
 
-Emergency alerts sent only when the registered elderly person is involved
+### Running the Applications
 
-💊 Smart Pillbox
+**Backend Server:**
+```bash
+npm run server
+# Runs on http://localhost:3000
+```
 
-ESP32-based smart pillbox
+**Mobile App:**
+```bash
+npm run mobile
+# Or directly: cd mobile && flutter run
+```
 
-Load cell + HX711 to detect whether medication was taken
+## 🔧 Configuration
 
-Visual (LED) and audio (buzzer) reminders
+### Backend (.env)
+Create `server/.env`:
+```
+PORT=3000
+DATABASE_URL=your_database_url
+JWT_SECRET=your_jwt_secret
+```
 
-Automatic notification to caregivers when a dose is missed or taken
+### Mobile (API Config)
+Update `mobile/lib/config/api_config.dart`:
+```dart
+static const String baseUrl = 'http://localhost:3000';
+```
 
-🆘 SOS Emergency Button
+## 🏗️ Key Features
 
-Physical SOS button for manual emergency alerts
+### 🎥 AI Camera Monitoring
+- Real-time human detection using YOLOv8
+- Elderly selection & ID locking to avoid false alerts
+- Fall detection based on motion, posture, and temporal analysis
 
-Works independently of camera detection
+### 📱 Mobile Application
+- Real-time activity monitoring
+- Emergency alerts and notifications
+- Medication reminders
+- Caregiver dashboard
 
-Instant notification to caregivers via backend services
+### ☁️ Backend Services
+- RESTful API
+- Real-time data processing
+- IoT device integration
+- User authentication & authorization
 
-☁️ Backend & Dashboard
+## 👥 Team Collaboration
 
-Central backend to collect and process data from devices
+### Backend Team
+Work in the `server/` directory
+```bash
+cd server
+npm install
+npm run dev
+```
 
-Real-time alerts & event logging
+### Mobile Team
+Work in the `mobile/` directory
+```bash
+cd mobile
+flutter pub get
+flutter run
+```
 
-Caregiver dashboard for monitoring status and history
+## 📝 Git Workflow
+```bash
+# Pull latest changes
+git pull origin main
 
-Designed to be scalable and secure
+# Create feature branch
+git checkout -b feature/your-feature-name
 
-# 🧠 Technologies Used
+# Make changes, then commit
+git add .
+git commit -m "Description of changes"
 
-AI / Computer Vision: YOLOv8, OpenCV
+# Push and create PR
+git push origin feature/your-feature-name
+```
 
-IoT Hardware: ESP32, Load Cell, HX711, LEDs, Buzzer
+## 📄 License
+[Add your license here]
 
-Backend: REST APIs, Database (Firebase / Node.js / FastAPI – configurable)
-
-Communication: Wi-Fi, HTTP / MQTT
-
-Frontend (Planned): Mobile or Web dashboard for caregivers
-
-# 🎯 Project Goals
-
-Reduce elderly fall-related risks
-
-Ensure medication adherence
-
-Minimize false alarms
-
-Provide caregivers with reliable, real-time insights
-
-Build a low-cost, scalable solution suitable for real-world deployment
-
-# 🏥 Use Case
-
-Sanad is ideal for:
-
-Elderly people living alone
-
-Families caring for seniors remotely
-
-Home-care services
-
-Assisted living environments
-
-# 🔮 Future Enhancements
-
-Face recognition for automatic elderly identification
-
-Activity pattern analysis
-
-Mobile app notifications
-
-Cloud analytics & reporting
-
-# ❤️ Why “Sanad”?
-
-Sanad means support in Arabic — reflecting the project’s mission to be a silent, reliable companion for the elderly and a trusted assistant for caregivers.
+## 👨‍💻 Contributors
+[Add team members]
