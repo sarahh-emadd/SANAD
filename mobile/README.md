@@ -1,38 +1,16 @@
-# SANAD Mobile App
+# sanad_app
 
-Flutter mobile application for the SANAD elderly care system.
-
-## Backend Repository
-Backend API: [https://github.com/sarahh-emadd/SANAD](https://github.com/sarahh-emadd/SANAD)
+Smart Elderly Care System
 
 ## Getting Started
 
-### Prerequisites
-- Flutter SDK
-- Dart SDK
-- iOS Simulator / Android Emulator
+This project is a starting point for a Flutter application.
 
-### Installation
-```bash
-flutter pub get
-```
+A few resources to get you started if this is your first Flutter project:
 
-### Running the app
-```bash
-flutter run
-```
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-### API Configuration
-Update the API endpoint in `lib/config/api_config.dart`
-
-## Project Structure
-```
-lib/
-├── main.dart
-├── config/          # API endpoints, constants
-├── models/          # Data models
-├── services/        # API services, auth
-├── screens/         # UI screens
-├── widgets/         # Reusable widgets
-└── utils/           # Helper functions
-```
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
