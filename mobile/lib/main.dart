@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:sanad_app/screens/onboarding/onboarding_wrapper.dart';
+import 'package:flutter/services.dart';
+import 'package:sanad_app/screens/elder_profile_step1_screen.dart';
+import 'theme/app_theme.dart';
+import 'screens/role_selection_screen.dart';
+import 'screens/elder_profile_step1_screen.dart';
+
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const SanadApp());
 }
 
@@ -11,16 +27,11 @@ class SanadApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Sanad',
       debugShowCheckedModeBanner: false,
-      title: 'Sanad App',
-      theme: ThemeData(
-        primaryColor: const Color(0xFF2A504C),
-        scaffoldBackgroundColor: const Color(0xFFF5F5F5),
-        fontFamily: 'Montserrat', // ← ضيفي السطر ده
-        useMaterial3: true,
-      ),
-
-      home: const OnboardingWrapper(),
+      theme: AppTheme.lightTheme,
+      home: const ElderProfileStep1Screen(),
     );
   }
 }
+
