@@ -118,6 +118,16 @@ class ApiConfig {
   static String voiceMessageSend(String id) => '$baseUrl/voice-messages/$id/send';
   static String voiceMessagesForElder(String elderlyId) => '$baseUrl/voice-messages/elder/$elderlyId';
 
+  // ── Pillbox ────────────────────────────────────────────────────────
+  static String pillboxSlots(String elderlyId) => '$baseUrl/pillbox/slots/$elderlyId';
+  static String pillboxSlot(String elderlyId, int slotNumber) =>
+      '$baseUrl/pillbox/slots/$elderlyId/$slotNumber';
+  static String get pillboxSchedules => '$baseUrl/pillbox/schedules';
+  static String pillboxScheduleById(String scheduleId) =>
+      '$baseUrl/pillbox/schedules/$scheduleId';
+  static String pillboxLogs(String elderlyId) => '$baseUrl/pillbox/logs/$elderlyId';
+  static String pillboxToday(String elderlyId) => '$baseUrl/pillbox/today/$elderlyId';
+
   // ── Timeouts ───────────────────────────────────────────────────────
   static const Duration timeout = Duration(seconds: 15);
 }

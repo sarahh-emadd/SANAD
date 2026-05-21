@@ -596,8 +596,15 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   label: 'Medications',
                   color: warnOrange,
                   bg: warnBg,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const ManagePillsScreen()))),
+                  onTap: () {
+                    if (_elderlyId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('No elder connected yet')));
+                      return;
+                    }
+                    Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ManagePillsScreen(elderlyId: _elderlyId!)));
+                  }),
               _actionCard(
                   icon: Icons.graphic_eq,
                   label: 'Voice Reminder',
@@ -672,8 +679,11 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           const SizedBox(height: 20),
 
           // ── Medication Adherence ───────────────────
-          _sectionTitle('Medication Adherence', 'Manage →', () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const ManagePillsScreen()))),
+          _sectionTitle('Medication Adherence', 'Manage →', () {
+            if (_elderlyId == null) return;
+            Navigator.push(context, MaterialPageRoute(
+                builder: (_) => ManagePillsScreen(elderlyId: _elderlyId!)));
+          }),
           const SizedBox(height: 10),
           _whiteCard(
               child: Column(children: [

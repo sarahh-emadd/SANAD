@@ -7,6 +7,7 @@ const qrRoutes            = require('./qr.routes');
 const eventsRoutes        = require('./events.routes');
 const sosRoutes           = require('./sos.routes');
 const voiceMessagesRoutes = require('./voice-messages.routes');
+const pillboxRoutes       = require('./pillbox.routes');
 const devRoutes           = require('./dev.routes');
 
 // Core routes
@@ -16,6 +17,7 @@ router.use('/qr',             qrRoutes);
 router.use('/events',         eventsRoutes);
 router.use('/sos',            sosRoutes);
 router.use('/voice-messages', voiceMessagesRoutes);
+router.use('/pillbox',        pillboxRoutes);
 
 // Dev routes
 router.use('/dev', devRoutes);

@@ -213,6 +213,33 @@ class NotificationService {
     return this._send(message, `sos_escalation | caregiver: ${row.caregiver_id}`);
   }
 
+  // ── Public: Raw notification (used by pillbox for pill taken/missed) ────────
+  /**
+   * Send an FCM notification with a known FCM token (no DB lookup needed).
+   * @param {string} fcmToken
+   * @param {{ title, body, data }} payload
+   */
+  async sendRawNotification(fcmToken, { title, body, data = {} }) {
+    const message = {
+      token: fcmToken,
+      notification: { title, body },
+      data: { ...data, click_action: 'FLUTTER_NOTIFICATION_CLICK' },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId:  'sanad_alerts',
+          sound:      'default',
+          priority:   'high',
+          visibility: 'public',
+        },
+      },
+      apns: {
+        payload: { aps: { sound: 'default', badge: 1, contentAvailable: true } },
+      },
+    };
+    return this._send(message, `pill_notification | token: ${fcmToken.slice(0, 10)}…`);
+  }
+
   // ── Private: shared DB lookup ─────────────────────────────────────────────
 
   /**

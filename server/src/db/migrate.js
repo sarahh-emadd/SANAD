@@ -212,6 +212,70 @@ async function runMigrations() {
       ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP DEFAULT NULL
     `);
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // SMART PILLBOX TABLES
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // ── 12. pill_slots — 3 physical slots per elderly person ─────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pill_slots (
+        id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+        elderly_id      UUID    NOT NULL REFERENCES elderly(id) ON DELETE CASCADE,
+        slot_number     INTEGER NOT NULL CHECK (slot_number BETWEEN 1 AND 3),
+        medication_name TEXT    NOT NULL DEFAULT '',
+        notes           TEXT,
+        is_active       BOOLEAN DEFAULT true,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW(),
+        UNIQUE(elderly_id, slot_number)
+      )
+    `);
+
+    // ── 13. pill_schedules — scheduled times for each slot ───────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pill_schedules (
+        id             UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+        slot_id        UUID    NOT NULL REFERENCES pill_slots(id) ON DELETE CASCADE,
+        elderly_id     UUID    NOT NULL REFERENCES elderly(id)   ON DELETE CASCADE,
+        scheduled_time TIME    NOT NULL,
+        label          TEXT,
+        is_active      BOOLEAN DEFAULT true,
+        created_at     TIMESTAMP DEFAULT NOW(),
+        updated_at     TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // ── 14. pill_logs — actual dose events (reported by ESP32) ───────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pill_logs (
+        id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+        schedule_id         UUID    REFERENCES pill_schedules(id) ON DELETE SET NULL,
+        slot_id             UUID    NOT NULL REFERENCES pill_slots(id) ON DELETE CASCADE,
+        elderly_id          UUID    NOT NULL REFERENCES elderly(id)   ON DELETE CASCADE,
+        scheduled_at        TIMESTAMP NOT NULL,
+        status              TEXT    DEFAULT 'pending'
+                              CHECK (status IN ('taken','missed','pending')),
+        taken_at            TIMESTAMP,
+        notified_caregiver  BOOLEAN DEFAULT false,
+        notified_at         TIMESTAMP,
+        created_at          TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // ── 15. pillbox_devices — ESP32 device registration ──────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pillbox_devices (
+        id               UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+        elderly_id       UUID    NOT NULL REFERENCES elderly(id) ON DELETE CASCADE,
+        device_mac       TEXT    UNIQUE NOT NULL,
+        firmware_version TEXT,
+        last_seen        TIMESTAMP,
+        is_online        BOOLEAN DEFAULT false,
+        created_at       TIMESTAMP DEFAULT NOW(),
+        updated_at       TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     logger.success('✓ DB migrations applied');
   } catch (err) {
     logger.error('Migration error:', err.message);
