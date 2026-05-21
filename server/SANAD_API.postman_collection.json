@@ -1,0 +1,176 @@
+{
+  "info": {
+    "name": "SANAD API - Complete Testing",
+    "description": "Complete API testing with QR code generation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "caregiver_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "elderly_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "qr_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "manual_code",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "1. Create Test Caregiver",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.collectionVariables.set(\"caregiver_id\", jsonData.data.caregiver.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testcaregiver@example.com\",\n  \"name\": \"Test Caregiver\",\n  \"phone\": \"+1234567890\"\n}"
+        },
+        "url": "{{base_url}}/dev/create-test-caregiver"
+      }
+    },
+    {
+      "name": "2. Create Elderly + Generate QR",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.collectionVariables.set(\"elderly_id\", jsonData.data.elderly.id);",
+              "pm.collectionVariables.set(\"qr_token\", jsonData.data.qrToken.token);",
+              "pm.collectionVariables.set(\"manual_code\", jsonData.data.manualCode);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"caregiver_id\": {{caregiver_id}},\n  \"name\": \"Grandma Sarah\",\n  \"photo_url\": \"https://via.placeholder.com/150\"\n}"
+        },
+        "url": "{{base_url}}/dev/create-elderly"
+      }
+    },
+    {
+      "name": "3. View QR Code (HTML)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/dev/view-qr/{{elderly_id}}"
+      }
+    },
+    {
+      "name": "4. Connect Device with QR Token",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{qr_token}}\"\n}"
+        },
+        "url": "{{base_url}}/dev/test-connect"
+      }
+    },
+    {
+      "name": "5. Connect Device with Manual Code",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"manualCode\": \"{{manual_code}}\"\n}"
+        },
+        "url": "{{base_url}}/dev/test-connect"
+      }
+    },
+    {
+      "name": "6. Get Active QR Code",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/dev/elderly/{{elderly_id}}/qr"
+      }
+    },
+    {
+      "name": "7. Regenerate QR Code",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.collectionVariables.set(\"qr_token\", jsonData.data.qrToken.token);",
+              "pm.collectionVariables.set(\"manual_code\", jsonData.data.manualCode);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/dev/regenerate-qr/{{elderly_id}}"
+      }
+    },
+    {
+      "name": "8. List All Caregivers",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/dev/caregivers"
+      }
+    },
+    {
+      "name": "9. List All Elderly",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/dev/elderly"
+      }
+    },
+    {
+      "name": "10. Reset All Test Data",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{base_url}}/dev/reset"
+      }
+    }
+  ]
+}

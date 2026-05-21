@@ -1,0 +1,29 @@
+# ── Flutter / Dart ────────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+
+# ── iOS ───────────────────────────────────────────────────────────────────────
+ios/Pods/
+ios/Podfile.lock
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# ── Android ───────────────────────────────────────────────────────────────────
+android/.gradle/
+android/local.properties
+android/app/google-services.json
+
+# ── Firebase (contains project secrets) ───────────────────────────────────────
+# Keep firebase_options.dart since it only has non-secret config for this project
+# lib/firebase_options.dart
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp

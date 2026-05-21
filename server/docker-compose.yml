@@ -1,0 +1,101 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: graduation_project_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: sanad_pillbox
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO (object storage for snapshots)
+  minio:
+    image: minio/minio:latest
+    container_name: graduation_project_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Node.js Backend Application
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graduation_project_backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # ── Set this to your Mac's LAN IP (run: ipconfig getifaddr en0) ──────────
+      # Must match _kLanIp in mobile/lib/config/api_config.dart
+      MINIO_PUBLIC_HOST: ${MINIO_PUBLIC_HOST}
+      MINIO_PUBLIC_PORT: "9000"
+      NODE_ENV: development
+      PORT: 3000
+
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
+
+      # MinIO — uses service name 'minio' as host inside Docker network
+      MINIO_ENDPOINT:   minio
+      MINIO_PORT:       "9000"
+      MINIO_USE_SSL:    "false"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+
+      # Firebase Admin SDK — values come from .env
+      FIREBASE_PROJECT_ID:      ${FIREBASE_PROJECT_ID}
+      FIREBASE_PRIVATE_KEY_ID:  ${FIREBASE_PRIVATE_KEY_ID}
+      FIREBASE_PRIVATE_KEY:     ${FIREBASE_PRIVATE_KEY}
+      FIREBASE_CLIENT_EMAIL:    ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_DATABASE_URL:    ${FIREBASE_DATABASE_URL}
+
+      CORS_ORIGIN: "*"
+
+    env_file:
+      - .env
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+    networks:
+      - app_network
+
+# Persistent data storage
+volumes:
+  postgres_data:
+  minio_data:
+
+# Network for services to communicate
+networks:
+  app_network:
+    driver: bridge
