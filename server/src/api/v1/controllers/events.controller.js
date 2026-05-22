@@ -12,6 +12,7 @@
 const eventsService       = require('../../../services/events.service');
 const notificationService = require('../../../services/notification.service');
 const socketService       = require('../../../services/socket.service');
+const sosService          = require('../../../services/sos.service');
 const ApiResponse         = require('../../../utils/ApiResponse');
 const ApiError            = require('../../../utils/ApiError');
 const asyncHandler        = require('../../../utils/asyncHandler');
@@ -76,6 +77,29 @@ const createEvent = asyncHandler(async (req, res) => {
       })
       .catch((err) => {
         logger.error(`FCM pipeline error (non-fatal): ${err.message}`);
+      });
+  }
+
+  // ── 5. Auto-SOS on confirmed fall (non-blocking) ──────────────────────────
+  // A confirmed fall from the AI automatically opens the SOS incoming-call
+  // screen on the caregiver's device, identical to a manually triggered SOS.
+  if (event_type === 'fall' && caregiver_id) {
+    sosService.createSos(elderly_id, 'auto_fall')
+      .then((sos) => {
+        const io = req.app.get('io');
+        if (io) {
+          socketService.emitSosAlert(io, caregiver_id, {
+            sos_id:       sos.id,
+            elderly_id,
+            elderly_name: sos.elderly_name ?? 'Elder',
+            source:       'auto_fall',
+            created_at:   sos.created_at,
+          });
+        }
+        return notificationService.sendSosAlert(elderly_id, sos.id, 'auto_fall');
+      })
+      .catch((err) => {
+        logger.error(`Auto-SOS pipeline error (non-fatal): ${err.message}`);
       });
   }
 

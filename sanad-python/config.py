@@ -30,7 +30,7 @@ PROCESS_EVERY_N_FRAMES = 2
 # ─────────────────────────────────────────────
 # Detection
 # ─────────────────────────────────────────────
-FALL_CONFIRMATION_SECONDS    = 2.0
+FALL_CONFIRMATION_SECONDS    = 1.5   # reduced from 2.0 — catch real falls faster
 INACTIVITY_THRESHOLD_SECONDS = 30
 INACTIVITY_MOVEMENT_PIXELS   = 15
 SLEEP_ANGLE_THRESHOLD        = 0.15

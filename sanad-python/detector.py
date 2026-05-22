@@ -1,5 +1,6 @@
 import time
 import logging
+import collections
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -19,45 +20,55 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────
-# Production Fall Detection Algorithm
-# Works even if face is covered (face-down falls)
+# Fall Detection Algorithm (velocity-aware)
+#
+# Key insight: a FALL is fast (body goes from
+# vertical → horizontal in < 1.5 s). Sleeping
+# is slow. We track posture history to measure
+# the transition speed and distinguish the two.
+#
+# Rules (weights):
+#   Rule 1: Torso horizontal     45%
+#   Rule 2: Legs collapsed       30%
+#   Rule 3: Head at torso level  15%
+#   Rule 4: Fast transition      10% bonus
+# Threshold: 65% (was 70% — lower to catch falls)
 # ─────────────────────────────────────────────
-def analyze_fall(landmarks):
+def analyze_fall(landmarks, posture_history=None):
     """
-    3-rule weighted fall detection:
-    - Rule 1: Torso horizontal     (50% weight)
-    - Rule 2: Legs collapsed       (30% weight)
-    - Rule 3: Head at torso level  (20% weight, optional)
-    Threshold: 70% confidence
+    posture_history: collections.deque of (timestamp, shoulder_hip_diff)
+                     — pass None when history is unavailable.
+    Returns (is_fall, confidence, reason_str)
     """
     if not landmarks or len(landmarks) < 33:
         return False, 0.0, "Incomplete landmarks"
 
-    nose          = landmarks[0]
-    left_shoulder = landmarks[11]
-    right_shoulder= landmarks[12]
-    left_hip      = landmarks[23]
-    right_hip     = landmarks[24]
-    left_knee     = landmarks[25]
-    right_knee    = landmarks[26]
-    left_ankle    = landmarks[27]
-    right_ankle   = landmarks[28]
+    nose           = landmarks[0]
+    left_shoulder  = landmarks[11]
+    right_shoulder = landmarks[12]
+    left_hip       = landmarks[23]
+    right_hip      = landmarks[24]
+    left_knee      = landmarks[25]
+    right_knee     = landmarks[26]
+    left_ankle     = landmarks[27]
+    right_ankle    = landmarks[28]
 
     avg_hip_y      = (left_hip.y      + right_hip.y)      / 2
     avg_shoulder_y = (left_shoulder.y + right_shoulder.y) / 2
     avg_knee_y     = (left_knee.y     + right_knee.y)     / 2
     avg_ankle_y    = (left_ankle.y    + right_ankle.y)    / 2
 
+    shoulder_hip_diff = abs(avg_hip_y - avg_shoulder_y)
+
     confidence = 0.0
     reasons    = []
 
-    # Rule 1: Torso horizontal (50%)
-    shoulder_hip_diff = abs(avg_hip_y - avg_shoulder_y)
+    # Rule 1: Torso horizontal (45%)
     if shoulder_hip_diff < 0.15:
-        confidence += 0.50
+        confidence += 0.45
         reasons.append("Torso horizontal")
     elif shoulder_hip_diff < 0.25:
-        confidence += 0.25
+        confidence += 0.22
         reasons.append("Torso tilted")
 
     # Rule 2: Legs collapsed (30%)
@@ -70,20 +81,45 @@ def analyze_fall(landmarks):
         confidence += 0.15
         reasons.append("Legs bent")
 
-    # Rule 3: Head at torso level (20%, only if nose visible)
+    # Rule 3: Head at torso level (15%, only if nose visible)
     nose_hip_diff = avg_hip_y - nose.y
     nose_valid    = abs(nose_hip_diff) >= 0.02
     if nose_valid and nose_hip_diff >= 0:
         if nose_hip_diff < 0.08:
-            confidence += 0.20
+            confidence += 0.15
             reasons.append("Head at torso level")
         elif nose_hip_diff < 0.15:
-            confidence += 0.10
+            confidence += 0.07
     elif not nose_valid:
         reasons.append("Face covered")
 
-    confidence = min(confidence, 1.0)
-    is_fall    = confidence >= 0.70
+    # Rule 4: Velocity bonus — fast transition = fall, slow = sleep (10%)
+    # Look back up to 1.5 seconds. If body went from vertical (diff > 0.30)
+    # to horizontal (diff < 0.20) quickly, boost confidence.
+    if posture_history and len(posture_history) >= 3:
+        now = time.time()
+        # Find the most upright posture within the last 2 seconds
+        recent = [(t, d) for t, d in posture_history if now - t <= 2.0]
+        if recent:
+            max_diff_recent = max(d for _, d in recent)
+            # Was person upright recently and now horizontal?
+            if max_diff_recent > 0.28 and shoulder_hip_diff < 0.20:
+                # How fast? time from upright to now
+                upright_time = next(
+                    (t for t, d in reversed(list(recent)) if d > 0.28), None
+                )
+                if upright_time and (now - upright_time) < 1.5:
+                    confidence += 0.10
+                    reasons.append(f"Fast drop {now - upright_time:.1f}s")
+                elif upright_time and (now - upright_time) < 3.0:
+                    confidence += 0.05
+                    reasons.append("Moderate drop")
+            # Slow transition (sleep-like): penalise slightly
+            elif max_diff_recent > 0.28 and shoulder_hip_diff < 0.20:
+                confidence -= 0.05  # gradual lie-down → less likely a fall
+
+    confidence = max(0.0, min(confidence, 1.0))
+    is_fall    = confidence >= 0.65   # slightly lower than 0.70 to catch real falls
     reason_str = ", ".join(reasons) if reasons else "Normal posture"
 
     return is_fall, confidence, reason_str
@@ -98,6 +134,10 @@ class DetectionState:
         self.fall_start_time  = None
         self.fall_counted     = False
         self.last_fall_time   = 0
+
+        # Posture history: deque of (timestamp, shoulder_hip_diff)
+        # Used by analyze_fall to compute transition velocity.
+        self.posture_history = collections.deque(maxlen=60)  # ~2 s at 30 fps
 
         # Inactivity
         self.last_movement_time = time.time()
@@ -160,7 +200,12 @@ class Detector:
 
     # ── Fall Detection ────────────────────────────────
     def _check_fall(self, landmarks, frame, annotated):
-        is_fall, confidence, reason = analyze_fall(landmarks)
+        # Record current posture angle for velocity tracking
+        avg_sh_y = (landmarks[11].y + landmarks[12].y) / 2
+        avg_hp_y = (landmarks[23].y + landmarks[24].y) / 2
+        self.state.posture_history.append((time.time(), abs(avg_hp_y - avg_sh_y)))
+
+        is_fall, confidence, reason = analyze_fall(landmarks, self.state.posture_history)
 
         # Visual confidence bar
         bar_w = int(confidence * 400)
@@ -240,13 +285,33 @@ class Detector:
             self.state.sleep_start_time = None
             return
 
-        # Use same torso angle logic
-        avg_shoulder_y = (landmarks[11].y + landmarks[12].y) / 2
-        avg_hip_y      = (landmarks[23].y + landmarks[24].y) / 2
+        # Skip sleeping check if a fall was just confirmed (within 90 s).
+        # A fall that keeps the person on the ground should NOT be re-labelled
+        # as "sleeping" — the fall alert already covers it.
+        if (time.time() - self.state.last_fall_time) < 90:
+            self.state.sleep_start_time = None
+            return
+
+        avg_shoulder_y    = (landmarks[11].y + landmarks[12].y) / 2
+        avg_hip_y         = (landmarks[23].y + landmarks[24].y) / 2
         shoulder_hip_diff = abs(avg_hip_y - avg_shoulder_y)
+
+        # Require body to be more horizontal than fall threshold to count as sleep.
+        # Also require the transition to have been SLOW (not a fast fall-like drop).
         is_lying = shoulder_hip_diff < SLEEP_ANGLE_THRESHOLD
 
-        if is_lying:
+        # Velocity check: if posture history shows a fast drop, it was a fall, not sleep
+        slow_transition = True
+        if self.state.posture_history and len(self.state.posture_history) >= 5:
+            now     = time.time()
+            recent  = [(t, d) for t, d in self.state.posture_history if now - t <= 1.5]
+            if recent:
+                max_recent = max(d for _, d in recent)
+                if max_recent > 0.28 and shoulder_hip_diff < 0.20:
+                    # Person was upright and quickly went horizontal — that's a fall
+                    slow_transition = False
+
+        if is_lying and slow_transition:
             if self.state.sleep_start_time is None:
                 self.state.sleep_start_time = time.time()
             elif time.time() - self.state.sleep_start_time >= SLEEP_CONFIRMATION_SECONDS:

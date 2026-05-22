@@ -122,6 +122,15 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
       if (data is Map) _onSosAlert(Map<String, dynamic>.from(data));
     });
 
+    // AI camera event (fall / inactivity / sleeping) — refresh stats immediately
+    _sosSocket!.on('event_alert', (data) {
+      if (!mounted || _elderlyId == null) return;
+      FirebaseAuth.instance.currentUser?.getIdToken().then((token) {
+        _fetchTodayStats(_elderlyId!, token);
+        _fetchNotifications(token);
+      });
+    });
+
     // Elder left the safe zone while app is open
     _sosSocket!.on('geofence_alert', (data) {
       if (!mounted || data == null) return;
