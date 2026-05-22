@@ -53,7 +53,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
   // ── Real data state ────────────────────────────────
   TodayStats _todayStats =
-      TodayStats(falls: 0, inactivity: 0, sleeping: 0, total: 0);
+      TodayStats(falls: 0, inactivity: 0, sleeping: 0, nightRestlessness: 0, total: 0);
   List<EventModel> _recentEvents = [];
   bool _cameraOffline = false;
 
@@ -121,22 +121,32 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         setState(() {
           if (eventType == 'fall')
             _todayStats = TodayStats(
-                falls: _todayStats.falls + 1,
-                inactivity: _todayStats.inactivity,
-                sleeping: _todayStats.sleeping,
-                total: _todayStats.total + 1);
+                falls:             _todayStats.falls + 1,
+                inactivity:        _todayStats.inactivity,
+                sleeping:          _todayStats.sleeping,
+                nightRestlessness: _todayStats.nightRestlessness,
+                total:             _todayStats.total + 1);
           if (eventType == 'inactivity')
             _todayStats = TodayStats(
-                falls: _todayStats.falls,
-                inactivity: _todayStats.inactivity + 1,
-                sleeping: _todayStats.sleeping,
-                total: _todayStats.total + 1);
+                falls:             _todayStats.falls,
+                inactivity:        _todayStats.inactivity + 1,
+                sleeping:          _todayStats.sleeping,
+                nightRestlessness: _todayStats.nightRestlessness,
+                total:             _todayStats.total + 1);
           if (eventType == 'sleeping')
             _todayStats = TodayStats(
-                falls: _todayStats.falls,
-                inactivity: _todayStats.inactivity,
-                sleeping: _todayStats.sleeping + 1,
-                total: _todayStats.total + 1);
+                falls:             _todayStats.falls,
+                inactivity:        _todayStats.inactivity,
+                sleeping:          _todayStats.sleeping + 1,
+                nightRestlessness: _todayStats.nightRestlessness,
+                total:             _todayStats.total + 1);
+          if (eventType == 'night_restlessness')
+            _todayStats = TodayStats(
+                falls:             _todayStats.falls,
+                inactivity:        _todayStats.inactivity,
+                sleeping:          _todayStats.sleeping,
+                nightRestlessness: _todayStats.nightRestlessness + 1,
+                total:             _todayStats.total + 1);
         });
 
         // Show banner at top of screen
@@ -191,6 +201,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         break;
       case 'sleeping':
         title = '💤 Sleeping Alert ($confidencePct%)';
+        break;
+      case 'night_restlessness':
+        title = '🌙 Night Restlessness ($confidencePct%)';
         break;
       default:
         title = '⚠️ Alert ($confidencePct%)';
@@ -264,17 +277,23 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                       ? Icons.warning_amber_rounded
                       : e.eventType == 'inactivity'
                           ? Icons.do_not_disturb_on_outlined
-                          : Icons.bedtime_outlined,
+                          : e.eventType == 'night_restlessness'
+                              ? Icons.nights_stay_outlined
+                              : Icons.bedtime_outlined,
                   iconColor: e.eventType == 'fall'
                       ? dangerRed
                       : e.eventType == 'inactivity'
                           ? warnOrange
-                          : infoBlue,
+                          : e.eventType == 'night_restlessness'
+                              ? warnOrange
+                              : infoBlue,
                   iconBg: e.eventType == 'fall'
                       ? lightRed
                       : e.eventType == 'inactivity'
                           ? warnBg
-                          : infoBlueBg,
+                          : e.eventType == 'night_restlessness'
+                              ? warnBg
+                              : infoBlueBg,
                   title: '${e.title} · ${e.confidencePercent}',
                   time: e.timeAgo,
                 ))
