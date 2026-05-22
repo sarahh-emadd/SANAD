@@ -50,6 +50,8 @@ class EventModel {
         return 'Inactivity Alert';
       case 'sleeping':
         return 'Sleeping Alert';
+      case 'night_restlessness':
+        return 'Night Restlessness';
       default:
         return 'Alert';
     }
@@ -73,19 +75,22 @@ class TodayStats {
   final int falls;
   final int inactivity;
   final int sleeping;
+  final int nightRestlessness;
   final int total;
 
   TodayStats({
     required this.falls,
     required this.inactivity,
     required this.sleeping,
+    required this.nightRestlessness,
     required this.total,
   });
 
   String get activityLevel {
-    if (falls > 0) return 'Danger';
-    if (inactivity > 2) return 'Low';
-    if (total == 0) return 'Normal';
+    if (falls > 0)              return 'Danger';
+    if (inactivity > 2)         return 'Low';
+    if (nightRestlessness > 0)  return 'Restless Night 🌙';
+    if (total == 0)             return 'Normal';
     return 'Normal';
   }
 }
@@ -181,16 +186,17 @@ class EventsService {
             !e.isFalsePositive)
         .toList();
 
-    final falls = todayEvents.where((e) => e.eventType == 'fall').length;
-    final inactivity =
-        todayEvents.where((e) => e.eventType == 'inactivity').length;
-    final sleeping = todayEvents.where((e) => e.eventType == 'sleeping').length;
+    final falls           = todayEvents.where((e) => e.eventType == 'fall').length;
+    final inactivity      = todayEvents.where((e) => e.eventType == 'inactivity').length;
+    final sleeping        = todayEvents.where((e) => e.eventType == 'sleeping').length;
+    final nightRestless   = todayEvents.where((e) => e.eventType == 'night_restlessness').length;
 
     return TodayStats(
-      falls: falls,
-      inactivity: inactivity,
-      sleeping: sleeping,
-      total: falls + inactivity + sleeping,
+      falls:              falls,
+      inactivity:         inactivity,
+      sleeping:           sleeping,
+      nightRestlessness:  nightRestless,
+      total:              falls + inactivity + sleeping + nightRestless,
     );
   }
 }

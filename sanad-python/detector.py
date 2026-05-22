@@ -13,6 +13,11 @@ from config import (
     SLEEP_ANGLE_THRESHOLD, SLEEP_CONFIRMATION_SECONDS,
     FALL_CONFIDENCE, INACTIVITY_CONFIDENCE, SLEEP_CONFIDENCE,
     ALERT_COOLDOWN_SECONDS,
+    INACTIVITY_WARNING_SECONDS, INACTIVITY_CRITICAL_SECONDS,
+    FRAME_DIFF_MOVEMENT_THRESHOLD,
+    NIGHT_RESTLESSNESS_THRESHOLD, NIGHT_RESTLESSNESS_DURATION,
+    INACTIVITY_WARNING_CONFIDENCE, INACTIVITY_CRITICAL_CONFIDENCE,
+    NIGHT_RESTLESSNESS_CONFIDENCE, INACTIVITY_ALERT_COOLDOWN,
 )
 from schedule import fetch_sleep_schedule
 
@@ -32,7 +37,7 @@ logger = logging.getLogger(__name__)
 #   Rule 2: Legs collapsed       30%
 #   Rule 3: Head at torso level  15%
 #   Rule 4: Fast transition      10% bonus
-# Threshold: 65% (was 70% — lower to catch falls)
+# Threshold: 65% (lower than default to catch real falls)
 # ─────────────────────────────────────────────
 def analyze_fall(landmarks, posture_history=None):
     """
@@ -126,6 +131,26 @@ def analyze_fall(landmarks, posture_history=None):
 
 
 # ─────────────────────────────────────────────
+# Movement / Activity Tracking (standalone)
+# ─────────────────────────────────────────────
+def detect_inactivity(current_frame, previous_frame, time_inactive):
+    """
+    Frame-difference inactivity check with tiered thresholds.
+    Returns (is_alert, confidence, reason).
+    """
+    diff = cv2.absdiff(current_frame, previous_frame)
+    movement_pixels = int(np.sum(diff > 30))
+
+    if movement_pixels < FRAME_DIFF_MOVEMENT_THRESHOLD:
+        if time_inactive > INACTIVITY_CRITICAL_SECONDS:
+            return True, INACTIVITY_CRITICAL_CONFIDENCE, "No movement for 2+ hours"
+        elif time_inactive > INACTIVITY_WARNING_SECONDS:
+            return True, INACTIVITY_WARNING_CONFIDENCE, "Extended inactivity"
+
+    return False, 0.0, "Active"
+
+
+# ─────────────────────────────────────────────
 # Detection State
 # ─────────────────────────────────────────────
 class DetectionState:
@@ -139,9 +164,18 @@ class DetectionState:
         # Used by analyze_fall to compute transition velocity.
         self.posture_history = collections.deque(maxlen=60)  # ~2 s at 30 fps
 
-        # Inactivity
+        # Inactivity (keypoint-based)
         self.last_movement_time = time.time()
         self.prev_keypoints     = None
+
+        # Activity tracking (frame-diff tiered alerts)
+        self.prev_frame                    = None
+        self.last_inactivity_warning_time  = 0
+        self.last_inactivity_critical_time = 0
+
+        # Night restlessness
+        self.night_restlessness_start     = None
+        self.last_restlessness_alert_time = 0
 
         # Sleeping
         self.sleep_start_time = None
@@ -152,7 +186,6 @@ class DetectionState:
 # ─────────────────────────────────────────────
 class Detector:
     def __init__(self, alert_sender):
-        # Use VIDEO mode for better performance (same as test3)
         base_options = python.BaseOptions(model_asset_path='pose_landmarker.task')
         options = vision.PoseLandmarkerOptions(
             base_options=base_options,
@@ -167,9 +200,9 @@ class Detector:
         self.state        = DetectionState()
         self.timestamp_ms = 0
 
-        schedule         = fetch_sleep_schedule()
-        self.wake_hour   = schedule["wake_hour"]
-        self.sleep_hour  = schedule["sleep_hour"]
+        schedule        = fetch_sleep_schedule()
+        self.wake_hour  = schedule["wake_hour"]
+        self.sleep_hour = schedule["sleep_hour"]
 
         logger.info("✅ Detector initialized (VIDEO mode)")
 
@@ -193,8 +226,15 @@ class Detector:
             self.state.fall_start_time  = None
             self.state.sleep_start_time = None
             pose_data = None
+            self._check_inactivity(None, frame, annotated)  # frame-diff works without pose
             cv2.putText(annotated, "No person detected", (10, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+        # Night restlessness runs always (independent of pose detection)
+        self._check_night_restlessness(frame, annotated)
+
+        # Save frame for next iteration's frame-diff calculations
+        self.state.prev_frame = frame.copy()
 
         return annotated, pose_data
 
@@ -228,11 +268,12 @@ class Detector:
 
                 if time_down >= FALL_CONFIRMATION_SECONDS:
                     if (current_time - self.state.last_fall_time) > ALERT_COOLDOWN_SECONDS:
-                        self.state.fall_counted  = True
+                        self.state.fall_counted   = True
                         self.state.last_fall_time = current_time
                         self._draw_alert(annotated, "FALL DETECTED", (0, 0, 255))
                         self.alert_sender.send_event("fall", confidence, frame,
                                                      self._extract_pose_data(landmarks, frame.shape))
+                        logger.warning(f"🚨 Fall confirmed — conf: {confidence:.0%}")
                     else:
                         remaining = ALERT_COOLDOWN_SECONDS - (current_time - self.state.last_fall_time)
                         cv2.putText(annotated, f"Cooldown {remaining:.0f}s", (10, 160),
@@ -247,29 +288,96 @@ class Detector:
                 self.state.fall_start_time = None
                 self.state.fall_counted    = False
 
-    # ── Inactivity Detection ──────────────────────────
+    # ── Inactivity / Activity Detection ──────────────
     def _check_inactivity(self, landmarks, frame, annotated):
+        current_time = time.time()
         h, w = frame.shape[:2]
-        keypoints = np.array([
-            [landmarks[15].x * w, landmarks[15].y * h],  # left wrist
-            [landmarks[16].x * w, landmarks[16].y * h],  # right wrist
-            [landmarks[11].x * w, landmarks[11].y * h],  # left shoulder
-            [landmarks[12].x * w, landmarks[12].y * h],  # right shoulder
-        ])
 
-        if self.state.prev_keypoints is not None:
-            movement = np.max(np.linalg.norm(keypoints - self.state.prev_keypoints, axis=1))
-            if movement > INACTIVITY_MOVEMENT_PIXELS:
-                self.state.last_movement_time = time.time()
+        # ── Keypoint-based movement detection (requires pose) ──
+        if landmarks is not None:
+            keypoints = np.array([
+                [landmarks[15].x * w, landmarks[15].y * h],  # left wrist
+                [landmarks[16].x * w, landmarks[16].y * h],  # right wrist
+                [landmarks[11].x * w, landmarks[11].y * h],  # left shoulder
+                [landmarks[12].x * w, landmarks[12].y * h],  # right shoulder
+            ])
+            if self.state.prev_keypoints is not None:
+                movement = np.max(np.linalg.norm(keypoints - self.state.prev_keypoints, axis=1))
+                if movement > INACTIVITY_MOVEMENT_PIXELS:
+                    self.state.last_movement_time = current_time
+            self.state.prev_keypoints = keypoints
 
-        self.state.prev_keypoints = keypoints
-        inactive_seconds = time.time() - self.state.last_movement_time
+        # ── Frame-difference movement detection (works without pose) ──
+        if self.state.prev_frame is not None:
+            diff = cv2.absdiff(frame, self.state.prev_frame)
+            if int(np.sum(diff > 30)) >= FRAME_DIFF_MOVEMENT_THRESHOLD:
+                self.state.last_movement_time = current_time
 
-        if inactive_seconds >= INACTIVITY_THRESHOLD_SECONDS:
-            self._draw_alert(annotated, f"INACTIVE {int(inactive_seconds)}s", (0, 165, 255))
-            self.alert_sender.send_event("inactivity", INACTIVITY_CONFIDENCE, frame,
-                                         self._extract_pose_data(landmarks, frame.shape))
-            self.state.last_movement_time = time.time()
+        inactive_seconds = current_time - self.state.last_movement_time
+
+        # ── Tiered alert via detect_inactivity ──
+        if self.state.prev_frame is not None:
+            is_alert, confidence, reason = detect_inactivity(
+                frame, self.state.prev_frame, inactive_seconds
+            )
+            if is_alert:
+                pose_data = (self._extract_pose_data(landmarks, frame.shape)
+                             if landmarks is not None else None)
+                if confidence >= INACTIVITY_CRITICAL_CONFIDENCE:
+                    if (current_time - self.state.last_inactivity_critical_time) > INACTIVITY_ALERT_COOLDOWN:
+                        self._draw_alert(annotated, "NO MOVEMENT 2+ HOURS", (0, 0, 255))
+                        self.alert_sender.send_event("inactivity", confidence, frame, pose_data)
+                        self.state.last_inactivity_critical_time = current_time
+                        logger.warning(f"🚨 Critical inactivity: {reason}")
+                else:
+                    if (current_time - self.state.last_inactivity_warning_time) > INACTIVITY_ALERT_COOLDOWN:
+                        self._draw_alert(annotated, "EXTENDED INACTIVITY", (0, 165, 255))
+                        self.alert_sender.send_event("inactivity", confidence, frame, pose_data)
+                        self.state.last_inactivity_warning_time = current_time
+                        logger.warning(f"⚠️  Inactivity warning: {reason}")
+
+        # ── Display inactive duration on frame when notable ──
+        if inactive_seconds >= 300:
+            mins = int(inactive_seconds // 60)
+            label = (f"Inactive: {mins}m" if mins < 60
+                     else f"Inactive: {mins // 60}h {mins % 60}m")
+            cv2.putText(annotated, label, (10, 200),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+
+    # ── Night Restlessness Detection ─────────────────
+    def _check_night_restlessness(self, frame, annotated):
+        from datetime import datetime
+        hour = datetime.now().hour
+
+        # Determine if it is currently sleep time
+        if self.wake_hour < self.sleep_hour:
+            is_sleep_time = not (self.wake_hour <= hour < self.sleep_hour)
+        else:
+            is_sleep_time = not (hour >= self.wake_hour or hour < self.sleep_hour)
+
+        if not is_sleep_time or self.state.prev_frame is None:
+            self.state.night_restlessness_start = None
+            return
+
+        diff = cv2.absdiff(frame, self.state.prev_frame)
+        movement_pixels = int(np.sum(diff > 30))
+        current_time = time.time()
+
+        if movement_pixels > NIGHT_RESTLESSNESS_THRESHOLD:
+            if self.state.night_restlessness_start is None:
+                self.state.night_restlessness_start = current_time
+                logger.debug("🌙 Night movement started")
+            elif (current_time - self.state.night_restlessness_start) >= NIGHT_RESTLESSNESS_DURATION:
+                if (current_time - self.state.last_restlessness_alert_time) > ALERT_COOLDOWN_SECONDS:
+                    self._draw_alert(annotated, "NIGHT RESTLESSNESS", (255, 165, 0))
+                    self.alert_sender.send_event(
+                        "night_restlessness", NIGHT_RESTLESSNESS_CONFIDENCE, frame, None
+                    )
+                    self.state.last_restlessness_alert_time = current_time
+                    self.state.night_restlessness_start     = None
+                    logger.warning("🌙 Night restlessness detected and alert sent")
+        else:
+            self.state.night_restlessness_start = None
 
     # ── Sleeping Detection ────────────────────────────
     def _check_sleeping(self, landmarks, frame, annotated):
@@ -286,7 +394,7 @@ class Detector:
             return
 
         # Skip sleeping check if a fall was just confirmed (within 90 s).
-        # A fall that keeps the person on the ground should NOT be re-labelled
+        # A person who fell and stays on the ground must NOT be re-labelled
         # as "sleeping" — the fall alert already covers it.
         if (time.time() - self.state.last_fall_time) < 90:
             self.state.sleep_start_time = None
@@ -295,16 +403,13 @@ class Detector:
         avg_shoulder_y    = (landmarks[11].y + landmarks[12].y) / 2
         avg_hip_y         = (landmarks[23].y + landmarks[24].y) / 2
         shoulder_hip_diff = abs(avg_hip_y - avg_shoulder_y)
-
-        # Require body to be more horizontal than fall threshold to count as sleep.
-        # Also require the transition to have been SLOW (not a fast fall-like drop).
         is_lying = shoulder_hip_diff < SLEEP_ANGLE_THRESHOLD
 
         # Velocity check: if posture history shows a fast drop, it was a fall, not sleep
         slow_transition = True
         if self.state.posture_history and len(self.state.posture_history) >= 5:
-            now     = time.time()
-            recent  = [(t, d) for t, d in self.state.posture_history if now - t <= 1.5]
+            now    = time.time()
+            recent = [(t, d) for t, d in self.state.posture_history if now - t <= 1.5]
             if recent:
                 max_recent = max(d for _, d in recent)
                 if max_recent > 0.28 and shoulder_hip_diff < 0.20:
@@ -361,13 +466,3 @@ class Detector:
 
     def close(self):
         self.detector.close()
-
-
-
-
-
-
-
-
-
-

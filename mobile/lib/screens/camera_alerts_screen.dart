@@ -92,37 +92,41 @@ class _CameraAlertsScreenState extends State<CameraAlertsScreen> {
 
   Color _typeColor(String? type) {
     switch (type) {
-      case 'fall':       return dangerRed;
-      case 'inactivity': return warnOrange;
-      case 'sleeping':   return infoBlue;
-      default:           return primary;
+      case 'fall':               return dangerRed;
+      case 'inactivity':         return warnOrange;
+      case 'sleeping':           return infoBlue;
+      case 'night_restlessness': return warnOrange;
+      default:                   return primary;
     }
   }
 
   Color _typeBg(String? type) {
     switch (type) {
-      case 'fall':       return lightRed;
-      case 'inactivity': return warnBg;
-      case 'sleeping':   return infoBlueBg;
-      default:           return lightGreen;
+      case 'fall':               return lightRed;
+      case 'inactivity':         return warnBg;
+      case 'sleeping':           return infoBlueBg;
+      case 'night_restlessness': return warnBg;
+      default:                   return lightGreen;
     }
   }
 
   IconData _typeIcon(String? type) {
     switch (type) {
-      case 'fall':       return Icons.warning_amber_rounded;
-      case 'inactivity': return Icons.hourglass_empty;
-      case 'sleeping':   return Icons.bedtime_outlined;
-      default:           return Icons.videocam_outlined;
+      case 'fall':               return Icons.warning_amber_rounded;
+      case 'inactivity':         return Icons.hourglass_empty;
+      case 'sleeping':           return Icons.bedtime_outlined;
+      case 'night_restlessness': return Icons.nights_stay_outlined;
+      default:                   return Icons.videocam_outlined;
     }
   }
 
   String _typeLabel(String? type) {
     switch (type) {
-      case 'fall':       return 'Fall';
-      case 'inactivity': return 'Inactivity';
-      case 'sleeping':   return 'Sleeping';
-      default:           return type ?? 'Event';
+      case 'fall':               return 'Fall';
+      case 'inactivity':         return 'Inactivity';
+      case 'sleeping':           return 'Sleeping';
+      case 'night_restlessness': return 'Night Restlessness';
+      default:                   return type ?? 'Event';
     }
   }
 

@@ -32,8 +32,8 @@ const createEvent = asyncHandler(async (req, res) => {
   if (!event_type)              throw new ApiError(400, 'event_type is required');
   if (confidence === undefined) throw new ApiError(400, 'confidence is required');
 
-  if (!['fall', 'inactivity', 'sleeping'].includes(event_type)) {
-    throw new ApiError(400, 'event_type must be: fall | inactivity | sleeping');
+  if (!['fall', 'inactivity', 'sleeping', 'night_restlessness'].includes(event_type)) {
+    throw new ApiError(400, 'event_type must be: fall | inactivity | sleeping | night_restlessness');
   }
 
   // ── 1. Save event + upload snapshot to MinIO ───────────────
@@ -211,9 +211,10 @@ const getTodayStats = asyncHandler(async (req, res) => {
 
   // Activity level string
   let activityLevel = 'Normal';
-  if (stats.fall > 0)            activityLevel = 'Alert 🚨';
-  else if (stats.inactivity > 0) activityLevel = 'Low Activity';
-  else if (stats.sleeping > 0)   activityLevel = 'Sleeping 💤';
+  if (stats.fall > 0)                    activityLevel = 'Alert 🚨';
+  else if (stats.inactivity > 0)         activityLevel = 'Low Activity';
+  else if (stats.night_restlessness > 0) activityLevel = 'Restless Night 🌙';
+  else if (stats.sleeping > 0)           activityLevel = 'Sleeping 💤';
 
   res.json(new ApiResponse(200, { stats, activityLevel }, 'Today stats retrieved'));
 });

@@ -172,6 +172,12 @@ class _NotificationsHistoryScreenState
         bgC = warnBg;
         ic = warnOrange;
         break;
+      case 'night_restlessness':
+        icon = Icons.nights_stay_outlined;
+        bc = const Color(0xFFFFB300);
+        bgC = warnBg;
+        ic = warnOrange;
+        break;
       default:
         icon = Icons.notifications_outlined;
         bc = const Color(0xFFA5D6A7);

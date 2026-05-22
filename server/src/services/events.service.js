@@ -162,7 +162,7 @@ class EventsService {
       [elderlyId]
     );
 
-    const stats = { fall: 0, inactivity: 0, sleeping: 0, total: 0 };
+    const stats = { fall: 0, inactivity: 0, sleeping: 0, night_restlessness: 0, total: 0 };
     for (const row of result.rows) {
       stats[row.event_type] = parseInt(row.count);
       stats.total += parseInt(row.count);

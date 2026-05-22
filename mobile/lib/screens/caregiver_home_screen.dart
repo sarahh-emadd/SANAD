@@ -420,12 +420,14 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
   Color _activityColor() {
     if (_activityLevel.startsWith('Alert'))    return dangerRed;
     if (_activityLevel.startsWith('Low'))      return warnOrange;
+    if (_activityLevel.startsWith('Restless')) return warnOrange;
     if (_activityLevel.startsWith('Sleeping')) return infoBlue;
     return okGreen;
   }
   Color _activityBg() {
     if (_activityLevel.startsWith('Alert'))    return lightRed;
     if (_activityLevel.startsWith('Low'))      return warnBg;
+    if (_activityLevel.startsWith('Restless')) return warnBg;
     if (_activityLevel.startsWith('Sleeping')) return infoBlueBg;
     return lightGreen;
   }
@@ -977,6 +979,11 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
       case 'sleeping':
         icon = Icons.bedtime_outlined; bc = const Color(0xFF90CAF9); bgC = infoBlueBg; ic = infoBlue;
         title = 'Sleeping Alert';
+        subtitle = name.isNotEmpty ? '$name · $time' : time;
+        break;
+      case 'night_restlessness':
+        icon = Icons.nights_stay_outlined; bc = const Color(0xFFFFB300); bgC = warnBg; ic = warnOrange;
+        title = 'Night Restlessness';
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       default:
