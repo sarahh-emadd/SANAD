@@ -75,7 +75,10 @@ class Camera:
                 if self.streamer is not None:
                     self.streamer.push_frame(frame)
 
-                # AI detection
+                # ── AI detection ─────────────────────────────────────────
+                # ELDERLY_ID is set by the background polling thread in
+                # main.py as soon as the backend confirms assignment.
+                # The camera loop never pauses — AI activates automatically.
                 if config.ELDERLY_ID is not None:
                     self._init_detector()
                     if frame_count % PROCESS_EVERY_N_FRAMES == 0:
@@ -84,15 +87,27 @@ class Camera:
                     else:
                         annotated = last_annotated if last_annotated is not None else frame
                 else:
+                    # Not yet assigned — show overlay, keep looping
                     annotated = frame.copy()
+                    cv2.rectangle(annotated, (0, 0), (annotated.shape[1], 70),
+                                  (0, 0, 0), -1)
                     cv2.putText(
                         annotated,
-                        "Waiting for assignment...",
-                        (10, 50),
+                        "SANAD: Waiting for elder assignment...",
+                        (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
+                        0.65,
                         (0, 165, 255),
                         2,
+                    )
+                    cv2.putText(
+                        annotated,
+                        "AI will start automatically once assigned.",
+                        (10, 58),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.50,
+                        (200, 200, 200),
+                        1,
                     )
 
                 # ✅ Show preview ONLY if allowed

@@ -6,6 +6,25 @@ import config
 
 logger = logging.getLogger(__name__)
 
+def fetch_elderly_id(camera_device_id: str) -> str | None:
+    """
+    Ask the backend which elderly this camera is assigned to.
+    Returns the elderly UUID string, or None if not assigned yet.
+    Called once at startup (and retried every 10 s until found).
+    """
+    try:
+        url = f"{config.SERVER_URL}/api/v1/dev/camera-device/{camera_device_id}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json().get("data", {})
+            return data.get("elderly_id")
+    except requests.exceptions.ConnectionError:
+        logger.warning("⚠ Server not reachable — will retry")
+    except Exception as e:
+        logger.warning(f"⚠ fetch_elderly_id error: {e}")
+    return None
+
+
 class AlertSender:
     def __init__(self):
         self.last_alert_time = {}  # event_type -> timestamp
