@@ -184,6 +184,14 @@ function init(io) {
         camera_device_id: camera_device_id ?? null,
       });
       socket.join(`elder_${elderly_id}`);
+
+      // ── Update last_seen whenever elder app connects ──────────
+      if (!camera_device_id) {
+        pool.query(
+          `UPDATE elderly SET last_seen = NOW(), updated_at = NOW() WHERE id = $1`,
+          [elderly_id]
+        ).catch(err => logger.warn(`last_seen update failed: ${err.message}`));
+      }
       logger.info(`📷 Camera in room elder_${elderly_id} | caregiver: ${resolved_caregiver_id}`);
 
       // ACK to Python
