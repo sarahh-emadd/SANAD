@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../l10n/app_strings.dart';
 
 class NotificationsHistoryScreen extends StatefulWidget {
   const NotificationsHistoryScreen({super.key});
@@ -157,7 +158,7 @@ class _NotificationsHistoryScreenState
               color: textDark, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Alerts', style: m(18, FontWeight.w700, textDark)),
+        title: Text(S.of(context).alerts, style: m(18, FontWeight.w700, textDark)),
         centerTitle: true,
         actions: [
           IconButton(
@@ -176,10 +177,10 @@ class _NotificationsHistoryScreenState
                         const Icon(Icons.notifications_none_rounded,
                             size: 48, color: textGrey),
                         const SizedBox(height: 12),
-                        Text('No alerts yet',
+                        Text(S.of(context).noAlerts,
                             style: m(15, FontWeight.w600, textGrey)),
                         const SizedBox(height: 6),
-                        Text('Alerts from AI detection will appear here',
+                        Text(S.of(context).alertsFromAI,
                             style: m(13, FontWeight.w400, textGrey)),
                       ]),
                 )
@@ -227,50 +228,51 @@ class _NotificationsHistoryScreenState
     Color bc, bgC, ic;
     String title;
 
+    final s = S.of(context);
     if (type == 'sos') {
       icon  = Icons.sos_rounded;
       bc    = dangerRed;
       bgC   = lightRed;
       ic    = dangerRed;
-      title = 'SOS Alert';
+      title = s.sosAlert;
     } else {
       switch (eventType) {
         case 'fall':
           icon = Icons.warning_amber_rounded; bc = dangerRed; bgC = lightRed; ic = dangerRed;
-          title = 'Fall Detected';
+          title = s.fallDetected;
           break;
         case 'inactivity':
           icon = Icons.do_not_disturb_on_outlined;
           bc = const Color(0xFFFFCC80); bgC = warnBg; ic = warnOrange;
-          title = 'Inactivity Alert';
+          title = s.inactivityAlert;
           break;
         case 'sleeping':
           icon = Icons.bedtime_outlined;
           bc = const Color(0xFFFFCC80); bgC = warnBg; ic = warnOrange;
-          title = 'Sleeping Alert';
+          title = s.sleepingAlert;
           break;
         case 'night_restlessness':
           icon = Icons.nights_stay_outlined;
           bc = const Color(0xFFFFB300); bgC = warnBg; ic = warnOrange;
-          title = 'Night Restlessness';
+          title = s.nightRestless;
           break;
         case 'pill_missed':
           icon = Icons.medication_outlined; bc = dangerRed; bgC = lightRed; ic = dangerRed;
-          title = 'Missed Dose';
+          title = s.missedDose;
           break;
         case 'pill_taken':
           icon = Icons.check_circle_outline; bc = const Color(0xFFA5D6A7); bgC = lightGreen; ic = okGreen;
-          title = 'Dose Taken';
+          title = s.doseTaken;
           break;
         case 'preset_message':
           icon = Icons.chat_bubble_outline_rounded;
           bc = const Color(0xFF90CAF9); bgC = const Color(0xFFE3F2FD); ic = const Color(0xFF1976D2);
-          title = 'Quick Message';
+          title = s.presenceMessage;
           break;
         default:
           icon = Icons.notifications_outlined;
           bc = const Color(0xFFA5D6A7); bgC = lightGreen; ic = okGreen;
-          title = n['title'] as String? ?? 'Alert';
+          title = n['title'] as String? ?? s.alerts;
       }
     }
 

@@ -16,6 +16,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../../config/api_config.dart';
+import '../../l10n/app_strings.dart';
 import '../../models/voice_reminder_model.dart';
 import '../../services/location_service.dart';
 import '../../services/sos_service.dart';
@@ -442,14 +443,14 @@ class _HomeElderPageState extends State<HomeElderPage> {
         builder: (_) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: Colors.white,
-          title: const Column(children: [
-            Text('💚', style: TextStyle(fontSize: 48)), SizedBox(height: 8),
-            Text('Help is on the way!',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2FA884)),
+          title: Column(children: [
+            const Text('💚', style: TextStyle(fontSize: 48)), const SizedBox(height: 8),
+            Text(S.of(context).helpOnWay,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2FA884)),
                 textAlign: TextAlign.center),
           ]),
-          content: const Text('Your caregiver has been notified and is coming to help you.',
-              style: TextStyle(fontSize: 15), textAlign: TextAlign.center),
+          content: Text(S.of(context).helpOnWayBody,
+              style: const TextStyle(fontSize: 15), textAlign: TextAlign.center),
           actionsAlignment: MainAxisAlignment.center,
           actions: [ElevatedButton(
             onPressed: () { Navigator.pop(context); setState(() => _helpOnWay = false); },
@@ -457,7 +458,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
               backgroundColor: const Color(0xFF2FA884), foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: Text(S.of(context).ok, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           )],
         ),
       );
@@ -505,13 +506,14 @@ class _HomeElderPageState extends State<HomeElderPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Send SOS?'),
-        content: const Text('This will immediately alert your caregiver.'),
+        title: Text(S.of(context).sendSos),
+        content: Text(S.of(context).sosConfirmBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: Text(S.of(context).cancel)),
           TextButton(onPressed: () => Navigator.pop(context, true),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Send SOS')),
+              child: Text(S.of(context).sendSos)),
         ],
       ),
     );
@@ -611,10 +613,10 @@ class _HomeElderPageState extends State<HomeElderPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Good morning,\n${_elderlyName ?? 'Margaret'}!',
+                    Text('${S.of(context).goodMorning},\n${_elderlyName ?? 'Margaret'}!',
                         style: m(20, FontWeight.w700, Colors.white).copyWith(height: 1.3)),
                     const SizedBox(height: 6),
-                    Text('Your Sanad is with you 💚',
+                    Text(S.of(context).sanadWith,
                         style: m(13, FontWeight.w500, Colors.white70)),
                   ])),
                   const SizedBox(width: 12),
@@ -642,7 +644,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
               ),
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(child: _heroStatBox(Icons.check_circle, 'Meds Today',
+                Expanded(child: _heroStatBox(Icons.check_circle, S.of(context).myMeds,
                     _medsTotal == 0 ? '--' : '$_medsTaken / $_medsTotal')),
                 const SizedBox(width: 10),
                 Expanded(child: _heroStatBox(Icons.person_outline, 'Caregiver',
@@ -654,13 +656,13 @@ class _HomeElderPageState extends State<HomeElderPage> {
           const SizedBox(height: 20),
 
           // ── Today's Medications ─────────────────────────────────
-          _sectionTitle("Today's Medications", 'History →', () =>
+          _sectionTitle(S.of(context).myMeds, '${S.of(context).history} →', () =>
               Navigator.push(context, MaterialPageRoute(
                   builder: (_) => const MedicationHistoryScreen()))),
           const SizedBox(height: 10),
           _whiteCard(child: Column(children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('Today', style: m(13, FontWeight.w500, textGrey)),
+              Text(S.of(context).today, style: m(13, FontWeight.w500, textGrey)),
               Text(_medsTotal == 0 ? '--' : '$_medsTaken / $_medsTotal',
                   style: m(13, FontWeight.w700, primary)),
             ]),
@@ -676,7 +678,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
             if (_slots.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text('No medications scheduled today',
+                child: Text(S.of(context).noMedsToday,
                     style: m(13, FontWeight.w400, textGrey)),
               )
             else
@@ -686,14 +688,14 @@ class _HomeElderPageState extends State<HomeElderPage> {
           const SizedBox(height: 20),
 
           // ── Pill Box Alerts ─────────────────────────────────────
-          _sectionTitle('Pill Box Alerts', 'History →', () =>
+          _sectionTitle(S.of(context).pillBoxAlerts, '${S.of(context).history} →', () =>
               Navigator.push(context, MaterialPageRoute(
                   builder: (_) => const PillBoxAlertHistoryScreen()))),
           const SizedBox(height: 10),
           _whiteCard(child: _alerts.isEmpty
               ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text('No alerts today',
+                  child: Text(S.of(context).noAlertsToday,
                       style: m(13, FontWeight.w400, textGrey)),
                 )
               : Column(children: _alerts.map(_buildAlertRow).toList())),
@@ -701,23 +703,23 @@ class _HomeElderPageState extends State<HomeElderPage> {
           const SizedBox(height: 20),
 
           // ── Quick Preset Messages ────────────────────────────────
-          _sectionTitle('Quick Message', null, null),
+          _sectionTitle(S.of(context).sendMessage, null, null),
           const SizedBox(height: 10),
           _whiteCard(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Tap to send a message to your caregiver:',
+              Text(S.of(context).tapToSend,
                   style: m(12, FontWeight.w500, textGrey)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _presetChip('im_okay',       '😊  I\'m okay'),
-                  _presetChip('need_medicine', '💊  Need medicine'),
-                  _presetChip('hungry',        '🍽️  Hungry'),
-                  _presetChip('tired',         '😴  Tired'),
-                  _presetChip('not_well',      '🤒  Not feeling well'),
+                  _presetChip('im_okay',       S.of(context).msgImOkay),
+                  _presetChip('need_medicine', S.of(context).msgNeedMedicine),
+                  _presetChip('hungry',        S.of(context).msgHungry),
+                  _presetChip('tired',         S.of(context).msgTired),
+                  _presetChip('not_well',      S.of(context).msgNotWell),
                 ],
               ),
             ],
@@ -726,7 +728,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
           const SizedBox(height: 20),
 
           // ── Messages ────────────────────────────────────────────
-          _sectionTitle('Messages', null, null),
+          _sectionTitle(S.of(context).messages, null, null),
           const SizedBox(height: 10),
           if (_voiceMessages.isEmpty)
             _whiteCard(child: Center(
@@ -735,7 +737,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
                 child: Column(children: [
                   Icon(Icons.graphic_eq, color: textGrey, size: 36),
                   const SizedBox(height: 8),
-                  Text('No messages yet', style: m(13, FontWeight.w500, textGrey)),
+                  Text(S.of(context).noMessages, style: m(13, FontWeight.w500, textGrey)),
                 ]),
               ),
             ))
@@ -825,6 +827,14 @@ class _HomeElderPageState extends State<HomeElderPage> {
               child: Text(action, style: m(13, FontWeight.w700, primary))),
       ]);
 
+  String _translateStatus(_SlotStatus status) {
+    switch (status) {
+      case _SlotStatus.taken:     return S.of(context).taken;
+      case _SlotStatus.dueSoon:   return S.of(context).dueSoon;
+      case _SlotStatus.scheduled: return S.of(context).scheduled;
+    }
+  }
+
   Widget _buildSlotRow(_SlotData slot) {
     Color bg, tc, icC; IconData ic;
     switch (slot.status) {
@@ -840,7 +850,8 @@ class _HomeElderPageState extends State<HomeElderPage> {
         Icon(ic, color: icC, size: 20), const SizedBox(width: 10),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(slot.label, style: m(13, FontWeight.w700, textDark)),
-          Text('${slot.time} · ${slot.statusLabel}', style: m(11, FontWeight.w500, tc)),
+          Text('${slot.time} · ${_translateStatus(slot.status)}',
+              style: m(11, FontWeight.w500, tc)),
         ]),
       ]),
     );

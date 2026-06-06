@@ -21,6 +21,7 @@ import 'voice_reminder_screen.dart';
 import 'dashboard_screen.dart';
 import 'geofencing_screen.dart';
 import 'camera_alerts_screen.dart';
+import '../l10n/app_strings.dart';
 
 class CaregiverHomeScreen extends StatefulWidget {
   const CaregiverHomeScreen({super.key});
@@ -127,6 +128,15 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
       FirebaseAuth.instance.currentUser?.getIdToken().then((token) {
         _fetchTodayStats(_elderlyId!, token);
         _fetchNotifications(token);
+      });
+    });
+
+    // ── Real-time pill update from ESP32 ─────────────────────
+    _sosSocket!.on('pill_update', (data) {
+      if (!mounted || _elderlyId == null) return;
+      FirebaseAuth.instance.currentUser?.getIdToken().then((token) {
+        _fetchPillboxToday(_elderlyId!, token);  // refresh slots + meds count
+        _fetchNotifications(token);              // refresh notifications list
       });
     });
 
@@ -757,7 +767,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           const SizedBox(height: 20),
 
           // ── Medication Adherence ───────────────────
-          _sectionTitle('Medication Adherence', 'Manage →', () {
+          _sectionTitle(S.of(context).adherence, '${S.of(context).manage} →', () {
             if (_elderlyId == null) return;
             Navigator.push(context, MaterialPageRoute(
                 builder: (_) => ManagePillsScreen(elderlyId: _elderlyId!)));
@@ -766,7 +776,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           _whiteCard(
               child: Column(children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('Today', style: m(13, FontWeight.w500, textGrey)),
+              Text(S.of(context).today, style: m(13, FontWeight.w500, textGrey)),
               Text('89%', style: m(13, FontWeight.w700, textDark)),
             ]),
             const SizedBox(height: 8),
@@ -780,10 +790,10 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
             ),
             const SizedBox(height: 14),
             if (_slots.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: Text('No medications scheduled today',
-                    style: TextStyle(color: Color(0xFFAAAAAA)))),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: Text(S.of(context).noMedsToday,
+                    style: const TextStyle(color: Color(0xFFAAAAAA)))),
               )
             else
               ..._slots.map(_buildSlotRow),
@@ -792,7 +802,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           const SizedBox(height: 20),
 
           // ── Notifications ──────────────────────────
-          _sectionTitle('Notifications', 'All History →', () {
+          _sectionTitle(S.of(context).notifications, '${S.of(context).allHistory} →', () {
             Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -808,7 +818,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       ? Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Center(
-                            child: Text('No recent alerts',
+                            child: Text(S.of(context).noAlerts,
                                 style: m(13, FontWeight.w500, textGrey)),
                           ),
                         )
@@ -821,7 +831,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           const SizedBox(height: 20),
 
           // ── Camera Monitoring ──────────────────────
-          _sectionTitle('Camera Monitoring', _elderlyId != null ? 'View Alerts →' : null,
+          _sectionTitle(S.of(context).cameraMonitoring, _elderlyId != null ? '${S.of(context).viewAlerts} →' : null,
               _elderlyId == null ? null : () => Navigator.push(context,
                   MaterialPageRoute(builder: (_) => CameraAlertsScreen(
                       elderlyId: _elderlyId!,
@@ -836,7 +846,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   color: _fallsToday > 0 ? lightRed : lightGreen,
                   borderRadius: BorderRadius.circular(14)),
               child: Column(children: [
-                Text('Falls Today', style: m(12, FontWeight.w500, textGrey)),
+                Text(S.of(context).fallsToday, style: m(12, FontWeight.w500, textGrey)),
                 const SizedBox(height: 4),
                 Text('$_fallsToday',
                     style: m(26, FontWeight.w700,
@@ -850,7 +860,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
               decoration: BoxDecoration(
                   color: _activityBg(), borderRadius: BorderRadius.circular(14)),
               child: Column(children: [
-                Text('Activity Level', style: m(12, FontWeight.w500, textGrey)),
+                Text(S.of(context).activityLevel, style: m(12, FontWeight.w500, textGrey)),
                 const SizedBox(height: 4),
                 Text(_activityLevel,
                     style: m(
@@ -977,6 +987,15 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         ),
       );
 
+  String _slotStatusLabel(SlotStatus status) {
+    switch (status) {
+      case SlotStatus.taken:     return S.of(context).taken;
+      case SlotStatus.missed:    return S.of(context).missed;
+      case SlotStatus.dueSoon:   return S.of(context).dueSoon;
+      case SlotStatus.scheduled: return S.of(context).scheduled;
+    }
+  }
+
   Widget _buildSlotRow(SlotData slot) {
     Color bg;
     Color tc;
@@ -1018,7 +1037,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         const SizedBox(width: 10),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(slot.label, style: m(13, FontWeight.w700, textDark)),
-          Text('${slot.time} · ${slot.statusLabel}',
+          Text('${slot.time} · ${_slotStatusLabel(slot.status)}',
               style: m(11, FontWeight.w500, tc)),
         ]),
       ]),
@@ -1035,40 +1054,41 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     Color bc, bgC, ic;
     String title, subtitle;
 
+    final s = S.of(context);
     switch (type) {
       case 'fall':
         icon = Icons.warning_amber_rounded; bc = dangerRed; bgC = lightRed; ic = dangerRed;
-        title = 'Fall Detected';
+        title = s.fallDetected;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       case 'auto_fall':
         icon = Icons.warning_amber_rounded; bc = dangerRed; bgC = lightRed; ic = dangerRed;
-        title = 'Auto-Fall SOS';
+        title = s.fallDetected;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       case 'sos':
         icon = Icons.sos; bc = dangerRed; bgC = lightRed; ic = dangerRed;
-        title = 'SOS Alert';
+        title = s.sosAlert;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       case 'inactivity':
         icon = Icons.hourglass_empty; bc = const Color(0xFFFFCC80); bgC = warnBg; ic = warnOrange;
-        title = 'Inactivity Alert';
+        title = s.inactivityAlert;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       case 'sleeping':
         icon = Icons.bedtime_outlined; bc = const Color(0xFF90CAF9); bgC = infoBlueBg; ic = infoBlue;
-        title = 'Sleeping Alert';
+        title = s.sleepingAlert;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       case 'night_restlessness':
         icon = Icons.nights_stay_outlined; bc = const Color(0xFFFFB300); bgC = warnBg; ic = warnOrange;
-        title = 'Night Restlessness';
+        title = s.nightRestless;
         subtitle = name.isNotEmpty ? '$name · $time' : time;
         break;
       default:
         icon = Icons.notifications_outlined; bc = const Color(0xFFFFCC80); bgC = warnBg; ic = warnOrange;
-        title = 'Alert';
+        title = s.alerts;
         subtitle = time;
     }
 

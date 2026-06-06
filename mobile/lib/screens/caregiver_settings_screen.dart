@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../config/app_settings_provider.dart';
 import '../config/locale_provider.dart';
+import '../l10n/app_strings.dart';
 import '../config/api_config.dart';
 import '../models/user_model.dart';
 import '../models/elderly_model.dart';
@@ -105,21 +106,21 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                   child: Column(children: [
                 _settingsTile(
                   icon: Icons.volume_up_outlined,
-                  title: 'Volume',
+                  title: S.of(context).volume,
                   subtitle: settings.volumeLabel,
                   onTap: _showVolumeSheet,
                 ),
                 _divider(),
                 _settingsTile(
                   icon: Icons.text_fields_rounded,
-                  title: 'Text Size',
+                  title: S.of(context).textSize,
                   subtitle: '${settings.textSize} (Current)',
                   onTap: _showTextSizeSheet,
                 ),
                 _divider(),
                 _settingsTile(
                   icon: Icons.language_rounded,
-                  title: 'Language',
+                  title: S.of(context).language,
                   subtitle: context.watch<LocaleProvider>().isArabic
                       ? 'العربية'
                       : 'English',
@@ -128,7 +129,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                 _divider(),
                 _settingsTile(
                   icon: Icons.notifications_outlined,
-                  title: 'Notifications',
+                  title: S.of(context).notifications,
                   subtitle: _notifAll ? 'All Enabled' : 'Some Disabled',
                   onTap: _showNotificationsSheet,
                 ),
