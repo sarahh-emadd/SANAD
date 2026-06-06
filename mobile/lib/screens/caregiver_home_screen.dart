@@ -613,23 +613,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                             ],
                           ]),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: dangerRed,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        minimumSize: Size.zero,
-                      ),
-                      icon: const Icon(Icons.phone, size: 16),
-                      label: Text('Call',
-                          style: m(13, FontWeight.w700, dangerRed)),
-                    ),
                   ]),
               const SizedBox(height: 16),
               Row(children: [
