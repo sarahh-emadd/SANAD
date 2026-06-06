@@ -169,9 +169,14 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
     await _loadSlots();
   }
 
-  Future<void> _addSchedule(String slotId, String time, String label) async {
+  Future<void> _addSchedule(String slotId, String time, String label, {String? scheduleId}) async {
     final token = await _token();
     if (token == null) return;
+
+    // If slot already has a schedule, replace it (delete old, add new)
+    if (scheduleId != null) {
+      await _deleteSchedule(scheduleId);
+    }
 
     await http.post(
       Uri.parse(ApiConfig.pillboxSchedules),
@@ -200,6 +205,15 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
     ).timeout(ApiConfig.timeout);
 
     await _loadAll();
+  }
+
+  // ── Refill alert: if 5+ taken doses for this slot in today's logs ───────────
+  bool _shouldShowRefillAlert(String slotId) {
+    final takenCount = _todayLogs
+        .where((l) => l['slot_id'] == slotId && l['dose_status'] == 'taken')
+        .length;
+    // Show refill alert after 5 confirmed taken doses from this slot
+    return takenCount >= 5;
   }
 
   // ── UI helpers ───────────────────────────────────────────────────────────────
@@ -292,9 +306,9 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
     );
   }
 
-  Future<void> _showAddScheduleDialog(String slotId) async {
-    TimeOfDay time  = const TimeOfDay(hour: 8, minute: 0);
-    String    label = _labelOptions[0];
+  Future<void> _showAddScheduleDialog(String slotId, {String? existingScheduleId, TimeOfDay? existingTime, String? existingLabel}) async {
+    TimeOfDay time  = existingTime ?? const TimeOfDay(hour: 8, minute: 0);
+    String    label = existingLabel ?? _labelOptions[0];
 
     await showModalBottomSheet(
       context: context,
@@ -407,7 +421,7 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
                   child: ElevatedButton(
                     onPressed: () async {
                       Navigator.pop(ctx);
-                      await _addSchedule(slotId, hhmm(), label);
+                      await _addSchedule(slotId, hhmm(), label, scheduleId: existingScheduleId);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _primary,
@@ -620,23 +634,69 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
             child: Divider(height: 1, color: _cardBorder),
           ),
 
-          // Schedules
+          // ── Refill alert ──────────────────────────────────
+          if (isActive && _shouldShowRefillAlert(slot['id'] as String))
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _lightAmber,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _amber.withValues(alpha: 0.4)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.inventory_2_outlined, color: _amber, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'Refill needed — many doses taken recently. Check pill count.',
+                  style: _m(11, FontWeight.w600, _amber),
+                )),
+              ]),
+            ),
+
+          if (isActive && _shouldShowRefillAlert(slot['id'] as String))
+            const SizedBox(height: 10),
+
+          // Schedules — max 1 per slot
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
-              Text('Schedules',
+              Text('Schedule',
                   style: _m(12, FontWeight.w700, _textGrey)),
               const Spacer(),
-              GestureDetector(
-                onTap: () =>
-                    _showAddScheduleDialog(slot['id'] as String),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.add_circle_outline,
-                      color: _primary, size: 16),
-                  const SizedBox(width: 4),
-                  Text('Add', style: _m(12, FontWeight.w600, _primary)),
-                ]),
-              ),
+              // Only show Add if slot has NO schedule yet
+              if (schedules.isEmpty)
+                GestureDetector(
+                  onTap: () => _showAddScheduleDialog(slot['id'] as String),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.add_circle_outline, color: _primary, size: 16),
+                    const SizedBox(width: 4),
+                    Text('Add', style: _m(12, FontWeight.w600, _primary)),
+                  ]),
+                )
+              else
+                // Already has a schedule — show Edit button
+                GestureDetector(
+                  onTap: () {
+                    final sc = schedules.first;
+                    final timeParts = (sc['scheduled_time'] as String).split(':');
+                    final existing = TimeOfDay(
+                      hour: int.parse(timeParts[0]),
+                      minute: int.parse(timeParts[1]),
+                    );
+                    _showAddScheduleDialog(
+                      slot['id'] as String,
+                      existingScheduleId: sc['id'] as String,
+                      existingTime: existing,
+                      existingLabel: sc['label'] as String?,
+                    );
+                  },
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.edit_outlined, color: _primary, size: 16),
+                    const SizedBox(width: 4),
+                    Text('Edit', style: _m(12, FontWeight.w600, _primary)),
+                  ]),
+                ),
             ]),
           ),
           const SizedBox(height: 8),

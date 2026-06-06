@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // ── Enums ──────────────────────────────────────────────
-enum SlotStatus { taken, dueSoon, scheduled }
+enum SlotStatus { taken, dueSoon, scheduled, missed }
 enum NotifType  { danger, warning, success }
 
 // ── Models ─────────────────────────────────────────────

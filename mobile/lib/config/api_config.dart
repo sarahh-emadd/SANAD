@@ -12,40 +12,29 @@ import 'package:flutter/foundation.dart';
 /// Option B — Local development on a real iOS/Android device (same Wi-Fi):
 ///   1. Find your Mac/PC IP:  run `ipconfig getifaddr en0` (Mac) or
 ///                                `ipconfig` (Windows, look for IPv4)
-///   2. Update _kLanIp below with that IP.
+///   2. Update the return value at the bottom of _host with that IP.
 ///   3. Rebuild the app.
 ///
 ///   Note: this IP changes if you switch networks. Prefer Option A.
 ///
 /// ──────────────────────────────────────────────────────────────────────────
 
-// ── FIX BUG 4: change this to your Mac/PC LAN IP for real-device testing ──
-const String _kLanIp = '192.168.1.254'; // ← update this
+// ── Production server (Railway) ───────────────────────────────────────────
+const String _kProductionUrl = 'https://sanad-production-ae45.up.railway.app';
 
 class ApiConfig {
   static String get _host {
-    // ── CI / Production: set via --dart-define=API_URL ───────────────
+    // ── Production build: flutter run --dart-define=API_URL=https://...  ──
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl;
 
-    // ── Web (Chrome) ─────────────────────────────────────────────────
+    // ── Local development default → Docker (teammates just run docker-compose up) ──
     if (kIsWeb) return 'http://localhost:3000';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:3000';
+    if (defaultTargetPlatform == TargetPlatform.macOS)   return 'http://localhost:3000';
 
-    // ── Android Emulator ─────────────────────────────────────────────
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:3000';
-    }
-
-    // ── macOS desktop ─────────────────────────────────────────────────
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return 'http://localhost:3000';
-    }
-
-    // ── iOS Simulator ─────────────────────────────────────────────────
-    // Uses your Mac's LAN IP (see _kLanIp above).
-    // For the iOS Simulator specifically, localhost also works:
-    //   return 'http://localhost:3000';
-    return 'http://$_kLanIp:3000';
+    // ── iOS Simulator & real device on same Mac ───────────────────────
+    return 'http://localhost:3000';
   }
 
   static const String _version = '/api/v1';
@@ -56,17 +45,8 @@ class ApiConfig {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl.replaceAll('/api/v1', '');
 
-    if (kIsWeb) return 'http://localhost:3000';
-
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:3000';
-    }
-
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return 'http://localhost:3000';
-    }
-
-    return 'http://$_kLanIp:3000';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:3000';
+    return 'http://localhost:3000';
   }
 
   // ── Auth ───────────────────────────────────────────────────────────

@@ -101,17 +101,11 @@ class _HomeElderPageState extends State<HomeElderPage> {
   // ── Voice messages received ──────────────────────────────────────────────
   List<VoiceReminder> _voiceMessages = [];
 
-  // ── Static data ──────────────────────────────────────────────────────────
-  static const List<_SlotData> slots = [
-    _SlotData('Slot 1', '8:00 AM',  'Taken',     _SlotStatus.taken),
-    _SlotData('Slot 2', '12:00 PM', 'Due Soon',  _SlotStatus.dueSoon),
-    _SlotData('Slot 3', '8:00 PM',  'Scheduled', _SlotStatus.scheduled),
-  ];
-  static const List<_AlertData> alerts = [
-    _AlertData(icon: Icons.error_outline,       title: 'Missed Dose',   subtitle: 'from Slot 2',    detail: '12:00 PM  •  missed from 30 mins ago', type: _AlertType.danger),
-    _AlertData(icon: Icons.autorenew,           title: 'Refill Needed', subtitle: 'Slot 1 is Empty',detail: '',                                     type: _AlertType.warning),
-    _AlertData(icon: Icons.check_circle_outline,title: 'Taken',         subtitle: 'from slot 1',    detail: '8:00 AM  •  Taken from 30 mins ago',   type: _AlertType.success),
-  ];
+  // ── Live pillbox data from backend ───────────────────────────────────────
+  List<_SlotData>  _slots  = [];
+  List<_AlertData> _alerts = [];
+  int _medsTaken = 0;
+  int _medsTotal = 0;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -313,6 +307,7 @@ class _HomeElderPageState extends State<HomeElderPage> {
     _connectElderSocket(id);
     _reportLocationWithBattery(id);
     _loadElderMessages(id);
+    _fetchPillboxToday(id);
   }
 
   Future<void> _reportLocationWithBattery(String elderlyId) async {
@@ -335,6 +330,81 @@ class _HomeElderPageState extends State<HomeElderPage> {
       final msgs = await VoiceReminderService.listElderMessages(elderlyId);
       if (mounted) setState(() => _voiceMessages = msgs);
     } catch (_) {}
+  }
+
+  Future<void> _fetchPillboxToday(String elderlyId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/pillbox/device/schedule?elderly_id=$elderlyId'),
+      ).timeout(ApiConfig.timeout);
+
+      if (res.statusCode != 200) return;
+      final schedule = (jsonDecode(res.body)['data']['schedule'] as List? ?? []);
+
+      final newSlots  = <_SlotData>[];
+      final newAlerts = <_AlertData>[];
+
+      for (final item in schedule) {
+        final slotNum    = item['slot_number'] as int? ?? 0;
+        final timeStr    = item['scheduled_time'] as String? ?? '--:--';
+        final doseStatus = item['dose_status'] as String?;
+        final medName    = item['medication_name'] as String? ?? 'Medication';
+
+        // Convert HH:MM → 12-hour
+        final parts  = timeStr.split(':');
+        final hour   = int.tryParse(parts[0]) ?? 0;
+        final minute = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+        final period = hour >= 12 ? 'PM' : 'AM';
+        final h12    = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        final label  = '$h12:${minute.toString().padLeft(2, '0')} $period';
+
+        _SlotStatus status;
+        String statusLabel;
+        if (doseStatus == 'taken') {
+          status = _SlotStatus.taken;
+          statusLabel = 'Taken';
+          newAlerts.add(_AlertData(
+            icon: Icons.check_circle_outline,
+            title: 'Taken',
+            subtitle: 'from Slot $slotNum',
+            detail: '$label  •  $medName',
+            type: _AlertType.success,
+          ));
+        } else if (doseStatus == 'missed') {
+          status = _SlotStatus.scheduled; // show as scheduled color
+          statusLabel = 'Missed';
+          newAlerts.add(_AlertData(
+            icon: Icons.error_outline,
+            title: 'Missed Dose',
+            subtitle: 'from Slot $slotNum',
+            detail: '$label  •  $medName',
+            type: _AlertType.danger,
+          ));
+        } else {
+          final now = DateTime.now();
+          final scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+          final diff = scheduled.difference(now).inMinutes;
+          if (diff >= 0 && diff <= 30) {
+            status = _SlotStatus.dueSoon;
+            statusLabel = 'Due Soon';
+          } else {
+            status = _SlotStatus.scheduled;
+            statusLabel = 'Scheduled';
+          }
+        }
+        newSlots.add(_SlotData('Slot $slotNum', label, statusLabel, status));
+      }
+
+      final taken = newSlots.where((s) => s.statusLabel == 'Taken').length;
+      if (mounted) setState(() {
+        _slots     = newSlots;
+        _alerts    = newAlerts;
+        _medsTaken = taken;
+        _medsTotal = newSlots.length;
+      });
+    } catch (e) {
+      debugPrint('[Elder] Pillbox error: $e');
+    }
   }
 
   void _connectElderSocket(String elderlyId) {
@@ -531,7 +601,8 @@ class _HomeElderPageState extends State<HomeElderPage> {
               ),
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(child: _heroStatBox(Icons.check_circle, 'Meds Today', '2 / 3')),
+                Expanded(child: _heroStatBox(Icons.check_circle, 'Meds Today',
+                    _medsTotal == 0 ? '--' : '$_medsTaken / $_medsTotal')),
                 const SizedBox(width: 10),
                 Expanded(child: _heroStatBox(Icons.person_outline, 'Caregiver',
                     _caregiverName ?? 'Olivia')),
@@ -549,16 +620,26 @@ class _HomeElderPageState extends State<HomeElderPage> {
           _whiteCard(child: Column(children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('Today', style: m(13, FontWeight.w500, textGrey)),
-              Text('2 / 3', style: m(13, FontWeight.w700, primary)),
+              Text(_medsTotal == 0 ? '--' : '$_medsTaken / $_medsTotal',
+                  style: m(13, FontWeight.w700, primary)),
             ]),
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(value: 2 / 3, minHeight: 8,
+              child: LinearProgressIndicator(
+                  value: _medsTotal == 0 ? 0 : _medsTaken / _medsTotal,
+                  minHeight: 8,
                   backgroundColor: const Color(0xFFEEEEEE), color: primary),
             ),
             const SizedBox(height: 14),
-            ...slots.map(_buildSlotRow),
+            if (_slots.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text('No medications scheduled today',
+                    style: m(13, FontWeight.w400, textGrey)),
+              )
+            else
+              ..._slots.map(_buildSlotRow),
           ])),
 
           const SizedBox(height: 20),
@@ -568,7 +649,13 @@ class _HomeElderPageState extends State<HomeElderPage> {
               Navigator.push(context, MaterialPageRoute(
                   builder: (_) => const PillBoxAlertHistoryScreen()))),
           const SizedBox(height: 10),
-          _whiteCard(child: Column(children: alerts.map(_buildAlertRow).toList())),
+          _whiteCard(child: _alerts.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('No alerts today',
+                      style: m(13, FontWeight.w400, textGrey)),
+                )
+              : Column(children: _alerts.map(_buildAlertRow).toList())),
 
           const SizedBox(height: 20),
 

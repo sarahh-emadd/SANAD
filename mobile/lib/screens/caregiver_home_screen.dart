@@ -76,13 +76,12 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
   bool _loadingNotifs = false;
   int _fallsToday = 0;
   String _activityLevel = 'Normal';
-  String? _elderLastSeenStr;   // ISO string returned from location endpoint
+  String? _elderLastSeenStr;
 
-  final List<SlotData> slots = [
-    SlotData('Slot 1', '8:00 AM', 'Taken', SlotStatus.taken),
-    SlotData('Slot 2', '12:00 PM', 'Due Soon', SlotStatus.dueSoon),
-    SlotData('Slot 3', '8:00 PM', 'Scheduled', SlotStatus.scheduled),
-  ];
+  // ── Pillbox — live from backend ────────────────────────────
+  List<SlotData> _slots = [];
+  int _medsTaken = 0;
+  int _medsTotal = 0;
 
   @override
   void initState() {
@@ -322,6 +321,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
               _fetchElderBattery(elderlyId, token);
               _fetchNotifications(token);
               _fetchTodayStats(elderlyId, token);
+              _fetchPillboxToday(elderlyId, token);
             }
             return;
           }
@@ -399,6 +399,70 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
       }
     } catch (e) {
       debugPrint('[Home] Today stats error: $e');
+    }
+  }
+
+  // ── Fetch real pillbox schedule + status from backend ─────
+  Future<void> _fetchPillboxToday(String elderlyId, String? token) async {
+    try {
+      final headers = token != null ? {'Authorization': 'Bearer $token'} : <String, String>{};
+      final res = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/pillbox/device/schedule?elderly_id=$elderlyId'),
+        headers: headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (res.statusCode == 200) {
+        final schedule = (jsonDecode(res.body)['data']['schedule'] as List? ?? []);
+        final newSlots = <SlotData>[];
+
+        for (final item in schedule) {
+          final slotNum   = item['slot_number'] as int? ?? 0;
+          final timeStr   = item['scheduled_time'] as String? ?? '--:--';
+          final doseStatus = item['dose_status'] as String?;
+          final medName   = item['medication_name'] as String? ?? 'Medication';
+
+          // Convert HH:MM → 12-hour format
+          final parts  = timeStr.split(':');
+          final hour   = int.tryParse(parts[0]) ?? 0;
+          final minute = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final h12    = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          final label  = '$h12:${minute.toString().padLeft(2, '0')} $period';
+
+          SlotStatus status;
+          String statusLabel;
+          if (doseStatus == 'taken') {
+            status = SlotStatus.taken;
+            statusLabel = 'Taken';
+          } else if (doseStatus == 'missed') {
+            status = SlotStatus.missed;
+            statusLabel = 'Missed';
+          } else {
+            // Check if due soon (within 30 min from now)
+            final now = DateTime.now();
+            final scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+            final diff = scheduled.difference(now).inMinutes;
+            if (diff >= 0 && diff <= 30) {
+              status = SlotStatus.dueSoon;
+              statusLabel = 'Due Soon';
+            } else {
+              status = SlotStatus.scheduled;
+              statusLabel = 'Scheduled';
+            }
+          }
+
+          newSlots.add(SlotData('Slot $slotNum • $medName', label, statusLabel, status));
+        }
+
+        final taken = newSlots.where((s) => s.status == SlotStatus.taken).length;
+        if (mounted) setState(() {
+          _slots     = newSlots;
+          _medsTaken = taken;
+          _medsTotal = newSlots.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('[Home] Pillbox error: $e');
     }
   }
 
@@ -561,7 +625,8 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
               Row(children: [
                 Expanded(
                     child: _heroStatBox(
-                        Icons.check_circle, 'Meds Today', '2 / 3')),
+                        Icons.check_circle, 'Meds Today',
+                        _medsTotal == 0 ? '--' : '$_medsTaken / $_medsTotal')),
                 const SizedBox(width: 10),
                 Expanded(
                     child: _heroStatBox(
@@ -636,7 +701,9 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   color: infoBlue,
                   bg: infoBlueBg,
                   onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const DashboardScreen()))),
+                      MaterialPageRoute(builder: (_) => DashboardScreen(
+                          elderlyId: _elderlyId ?? '',
+                          elderlyName: _elderlyName ?? 'Elder')))),
               _actionCard(
                   icon: Icons.location_on_outlined,
                   label: 'Elder Location',
@@ -712,7 +779,14 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   color: primary),
             ),
             const SizedBox(height: 14),
-            ...slots.map(_buildSlotRow),
+            if (_slots.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: Text('No medications scheduled today',
+                    style: TextStyle(color: Color(0xFFAAAAAA)))),
+              )
+            else
+              ..._slots.map(_buildSlotRow),
           ])),
 
           const SizedBox(height: 20),
@@ -926,6 +1000,12 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         tc = textGrey;
         ic = Icons.radio_button_unchecked;
         icC = textGrey;
+        break;
+      case SlotStatus.missed:
+        bg = lightRed;
+        tc = dangerRed;
+        ic = Icons.cancel_outlined;
+        icC = dangerRed;
         break;
     }
     return Container(
