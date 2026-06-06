@@ -387,6 +387,7 @@ class _VoiceReminderScreenState extends State<VoiceReminderScreen>
                         title:        msg.title,
                         filePath:     msg.filePath,
                         usedTimes:    msg.usedTimes + 1,
+                        durationSecs: msg.durationSecs,
                         lastUsed:     'Just now',
                         createdAt:    msg.createdAt,
                       );

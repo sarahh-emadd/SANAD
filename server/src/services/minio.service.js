@@ -10,20 +10,12 @@ const minioClient = new Minio.Client({
   secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
 });
 
-// Public signing client — used for presignedGetObject ONLY.
-// Presigned URLs are signed for the host in the client config.
-// If we sign with minio:9000 but serve at 192.168.1.x:9000 the signature
-// fails (Host header mismatch). So we sign with the public host instead.
+// Public host config — used to rewrite presigned URLs so Flutter can reach them.
+// We sign with the internal client (minio:9000) to avoid ECONNREFUSED when
+// 192.168.x.x is unreachable from inside Docker, then replace the host in
+// the generated URL so the mobile app receives the correct public address.
 const _publicHost = process.env.MINIO_PUBLIC_HOST || 'localhost';
 const _publicPort = parseInt(process.env.MINIO_PUBLIC_PORT || '9000');
-
-const minioSigningClient = new Minio.Client({
-  endPoint:  _publicHost,
-  port:      _publicPort,
-  useSSL:    false,
-  accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
-});
 
 const BUCKET_NAME = 'sanad';
 const SEVEN_DAYS  = 7 * 24 * 60 * 60;
@@ -48,8 +40,9 @@ class MinioService {
       { 'Content-Type': 'image/jpeg' }
     );
 
-    // Sign with public host so the URL is valid from the mobile app
-    const url = await minioSigningClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    // Sign with internal client (minio:9000), then rewrite host for mobile access
+    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
 
     logger.info(`✓ Snapshot saved: ${fileName}`);
     return url;
@@ -64,7 +57,8 @@ class MinioService {
       { 'Content-Type': 'video/mp4' }
     );
 
-    const url = await minioSigningClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
 
     logger.info(`✓ Video clip saved: ${fileName}`);
     return url;
@@ -82,7 +76,8 @@ class MinioService {
       { 'Content-Type': mimeType }
     );
 
-    const url = await minioSigningClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
+    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
 
     logger.info(`✓ Voice message saved: ${fileName}`);
     return url;
