@@ -1,24 +1,36 @@
 const Minio  = require('minio');
 const logger = require('../utils/logger');
 
-// Internal client — used for putObject (fast, inside Docker network)
+// Internal client — used for all MinIO operations inside Docker
 const minioClient = new Minio.Client({
-  endPoint:  process.env.MINIO_ENDPOINT || 'localhost',
+  endPoint:  process.env.MINIO_ENDPOINT || 'minio',
   port:      parseInt(process.env.MINIO_PORT || '9000'),
   useSSL:    process.env.MINIO_USE_SSL === 'true',
   accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
   secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
 });
 
-// Public host config — used to rewrite presigned URLs so Flutter can reach them.
-// We sign with the internal client (minio:9000) to avoid ECONNREFUSED when
-// 192.168.x.x is unreachable from inside Docker, then replace the host in
-// the generated URL so the mobile app receives the correct public address.
+// Public base URL — used to build direct (non-presigned) URLs for the mobile app.
+// The bucket is set to public-read so no signing is needed and URLs never expire.
 const _publicHost = process.env.MINIO_PUBLIC_HOST || 'localhost';
 const _publicPort = parseInt(process.env.MINIO_PUBLIC_PORT || '9000');
+const _publicBase = `http://${_publicHost}:${_publicPort}`;
 
 const BUCKET_NAME = 'sanad';
-const SEVEN_DAYS  = 7 * 24 * 60 * 60;
+
+// Public-read bucket policy — allows anyone to GET objects without signing.
+// This means snapshot/voice URLs never expire and work from any device on the LAN.
+const PUBLIC_READ_POLICY = JSON.stringify({
+  Version: '2012-10-17',
+  Statement: [
+    {
+      Effect:    'Allow',
+      Principal: '*',
+      Action:    ['s3:GetObject'],
+      Resource:  [`arn:aws:s3:::${BUCKET_NAME}/*`],
+    },
+  ],
+});
 
 class MinioService {
   async initialize() {
@@ -29,6 +41,19 @@ class MinioService {
     } else {
       logger.info(`✓ MinIO bucket '${BUCKET_NAME}' ready`);
     }
+
+    // Apply public-read policy so URLs never expire
+    try {
+      await minioClient.setBucketPolicy(BUCKET_NAME, PUBLIC_READ_POLICY);
+      logger.info(`✓ MinIO bucket '${BUCKET_NAME}' set to public-read`);
+    } catch (err) {
+      logger.warn(`⚠ Could not set bucket policy: ${err.message}`);
+    }
+  }
+
+  // Build a permanent public URL for an object (no presigning, no expiry)
+  _publicUrl(fileName) {
+    return `${_publicBase}/${BUCKET_NAME}/${fileName}`;
   }
 
   async uploadSnapshot(elderlyId, imageBuffer, eventType) {
@@ -40,10 +65,7 @@ class MinioService {
       { 'Content-Type': 'image/jpeg' }
     );
 
-    // Sign with internal client (minio:9000), then rewrite host for mobile access
-    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
-    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
-
+    const url = this._publicUrl(fileName);
     logger.info(`✓ Snapshot saved: ${fileName}`);
     return url;
   }
@@ -57,9 +79,7 @@ class MinioService {
       { 'Content-Type': 'video/mp4' }
     );
 
-    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
-    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
-
+    const url = this._publicUrl(fileName);
     logger.info(`✓ Video clip saved: ${fileName}`);
     return url;
   }
@@ -76,17 +96,20 @@ class MinioService {
       { 'Content-Type': mimeType }
     );
 
-    const rawUrl = await minioClient.presignedGetObject(BUCKET_NAME, fileName, SEVEN_DAYS);
-    const url = rawUrl.replace(`http://minio:9000`, `http://${_publicHost}:${_publicPort}`);
-
+    const url = this._publicUrl(fileName);
     logger.info(`✓ Voice message saved: ${fileName}`);
     return url;
   }
 
   async deleteFile(fileUrl) {
     try {
-      const parsed   = new URL(fileUrl);
-      const fileName = decodeURIComponent(parsed.pathname.replace(`/${BUCKET_NAME}/`, '').split('?')[0]);
+      const parsed = new URL(fileUrl);
+      // Handle both old presigned URLs (query string) and new plain URLs
+      let pathPart = decodeURIComponent(parsed.pathname);
+      // Strip leading /<bucket>/ prefix
+      pathPart = pathPart.replace(new RegExp(`^\\/${BUCKET_NAME}\\/`), '');
+      // Strip any query-string remnants (shouldn't be in pathname, but just in case)
+      const fileName = pathPart.split('?')[0];
       await minioClient.removeObject(BUCKET_NAME, fileName);
       logger.info(`✓ File deleted: ${fileName}`);
     } catch (err) {
