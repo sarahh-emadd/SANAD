@@ -8,6 +8,8 @@ const eventsRoutes        = require('./events.routes');
 const sosRoutes           = require('./sos.routes');
 const voiceMessagesRoutes = require('./voice-messages.routes');
 const pillboxRoutes       = require('./pillbox.routes');
+const messagesRoutes      = require('./messages.routes');
+const reportsRoutes       = require('./reports.routes');
 const devRoutes           = require('./dev.routes');
 
 // Core routes
@@ -18,6 +20,8 @@ router.use('/events',         eventsRoutes);
 router.use('/sos',            sosRoutes);
 router.use('/voice-messages', voiceMessagesRoutes);
 router.use('/pillbox',        pillboxRoutes);
+router.use('/messages',       messagesRoutes);
+router.use('/reports',        reportsRoutes);
 
 // Dev routes
 router.use('/dev', devRoutes);

@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../config/api_config.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -59,6 +62,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Insight message
   String _insightTitle   = '';
   String _insightMessage = '';
+
+  // PDF generation
+  bool _generatingReport = false;
 
   @override
   void initState() {
@@ -196,6 +202,161 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // ── Generate & share weekly PDF report ──────────────────────────────────
+  Future<void> _downloadWeeklyReport() async {
+    if (_generatingReport) return;
+    setState(() => _generatingReport = true);
+
+    try {
+      final token = await _token();
+      if (token == null) throw Exception('Not authenticated');
+
+      final res = await http.get(
+        Uri.parse(ApiConfig.weeklyReport(widget.elderlyId)),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(ApiConfig.timeout);
+
+      if (res.statusCode != 200) throw Exception('Server error ${res.statusCode}');
+      final report = jsonDecode(res.body)['data']['report'] as Map<String, dynamic>;
+
+      // ── Build PDF ───────────────────────────────────────────────────────
+      final pdf = pw.Document();
+      final pills = report['pills'] as Map;
+      final events = report['events'] as Map;
+      final daily = (pills['daily'] as List?) ?? [];
+      final adherencePct = pills['adherence_pct'] as int? ?? 0;
+
+      pdf.addPage(pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (ctx) => [
+          // Header
+          pw.Row(children: [
+            pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              pw.Text('SANAD Weekly Health Report',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromHex('#2FA884'))),
+              pw.SizedBox(height: 4),
+              pw.Text('${report['week_start']} → ${report['week_end']}',
+                  style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey600)),
+            ]),
+          ]),
+          pw.SizedBox(height: 8),
+          pw.Divider(color: PdfColor.fromHex('#2FA884')),
+          pw.SizedBox(height: 12),
+
+          // Elder info
+          pw.Row(children: [
+            pw.Text('Patient: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.Text(report['elderly_name'] ?? ''),
+            pw.SizedBox(width: 20),
+            pw.Text('Caregiver: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.Text(report['caregiver_name'] ?? ''),
+          ]),
+          pw.SizedBox(height: 16),
+
+          // Adherence summary
+          pw.Text('Medication Adherence',
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.Row(children: [
+            _pdfStat('Adherence', '$adherencePct%',
+                adherencePct >= 80 ? '#388E3C' : adherencePct >= 50 ? '#2FA884' : '#E53935'),
+            pw.SizedBox(width: 20),
+            _pdfStat('Taken', '${pills['taken_doses']}', '#388E3C'),
+            pw.SizedBox(width: 20),
+            _pdfStat('Missed', '${pills['missed_doses']}', '#E53935'),
+            pw.SizedBox(width: 20),
+            _pdfStat('Total Doses', '${pills['total_doses']}', '#1A1A1A'),
+          ]),
+          pw.SizedBox(height: 16),
+
+          // Daily breakdown
+          if (daily.isNotEmpty) ...[
+            pw.Text('Daily Breakdown',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 6),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColor.fromHex('#E6F4F0')),
+                  children: ['Date', 'Taken', 'Missed', 'Total'].map((h) =>
+                    pw.Padding(padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)))
+                  ).toList(),
+                ),
+                ...daily.map((d) => pw.TableRow(children: [
+                  _pdfCell(d['day']?.toString() ?? ''),
+                  _pdfCell(d['taken']?.toString() ?? '0'),
+                  _pdfCell(d['missed']?.toString() ?? '0'),
+                  _pdfCell(d['total']?.toString() ?? '0'),
+                ])),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // Safety events
+          pw.Text('Safety Events',
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.Row(children: [
+            _pdfStat('Falls', '${events['falls']}', '#E53935'),
+            pw.SizedBox(width: 20),
+            _pdfStat('Inactivity', '${events['inactivity']}', '#F57C00'),
+            pw.SizedBox(width: 20),
+            _pdfStat('SOS Alerts', '${report['sos_count']}', '#E53935'),
+          ]),
+          pw.SizedBox(height: 24),
+
+          // Footer
+          pw.Divider(),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'Generated by SANAD Care System on ${DateTime.now().toLocal().toString().substring(0, 16)}',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500),
+          ),
+        ],
+      ));
+
+      if (!mounted) return;
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'sanad_report_${report['week_end']}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not generate report: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _generatingReport = false);
+    }
+  }
+
+  pw.Widget _pdfStat(String label, String value, String hexColor) =>
+      pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex(hexColor).shade(0.15),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+          border: pw.Border.all(color: PdfColor.fromHex(hexColor).shade(0.5)),
+        ),
+        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
+          pw.Text(value, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold,
+              color: PdfColor.fromHex(hexColor))),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+        ]),
+      );
+
+  pw.Widget _pdfCell(String text) =>
+      pw.Padding(padding: const pw.EdgeInsets.all(6),
+          child: pw.Text(text, style: const pw.TextStyle(fontSize: 11)));
+
   String _timeAgo(String? iso) {
     if (iso == null || iso.isEmpty) return 'Unknown';
     try {
@@ -233,6 +394,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: _generatingReport
+                ? const SizedBox(width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: primary))
+                : const Icon(Icons.picture_as_pdf_outlined, color: primary),
+            tooltip: 'Download Weekly Report',
+            onPressed: _generatingReport ? null : _downloadWeeklyReport,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: primary),
             onPressed: _loadAll,

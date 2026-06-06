@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_settings_provider.dart';
+import 'config/locale_provider.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/onboarding/onboarding_wrapper.dart';
@@ -129,14 +131,34 @@ class _SanadAppState extends State<SanadApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<AppSettingsProvider>(
-      create: (_) => AppSettingsProvider(),
-      child: MaterialApp(
-        title: 'Sanad',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        navigatorKey: _navigatorKey,
-        home: widget.startScreen,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppSettingsProvider>(create: (_) => AppSettingsProvider()),
+        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
+      ],
+      child: Consumer2<AppSettingsProvider, LocaleProvider>(
+        builder: (context, settings, localeProvider, _) => MaterialApp(
+          title: 'Sanad',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          navigatorKey: _navigatorKey,
+          home: widget.startScreen,
+          // ── Locale / RTL ──────────────────────────────────
+          locale: localeProvider.locale,
+          supportedLocales: const [Locale('en'), Locale('ar')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          // ── Apply text size from settings ─────────────────
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(settings.fontScaleFactor),
+            ),
+            child: child!,
+          ),
+        ),
       ),
     );
   }

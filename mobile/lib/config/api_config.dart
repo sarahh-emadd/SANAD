@@ -108,6 +108,15 @@ class ApiConfig {
   static String pillboxLogs(String elderlyId) => '$baseUrl/pillbox/logs/$elderlyId';
   static String pillboxToday(String elderlyId) => '$baseUrl/pillbox/today/$elderlyId';
 
+  // ── Messages (elder → caregiver preset messages) ──────────────────
+  static String get sendPresetMessage => '$baseUrl/messages/preset';
+  static String get caregiverMessages => '$baseUrl/messages';
+  static String messageMarkRead(String id) => '$baseUrl/messages/$id/read';
+  static String get messagesUnreadCount => '$baseUrl/messages/unread-count';
+
+  // ── Reports ────────────────────────────────────────────────────────
+  static String weeklyReport(String elderlyId) => '$baseUrl/reports/weekly/$elderlyId';
+
   // ── Timeouts ───────────────────────────────────────────────────────
   static const Duration timeout = Duration(seconds: 15);
 }

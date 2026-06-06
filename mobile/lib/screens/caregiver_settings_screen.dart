@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../config/app_settings_provider.dart';
+import '../config/locale_provider.dart';
 import '../config/api_config.dart';
 import '../models/user_model.dart';
 import '../models/elderly_model.dart';
@@ -114,6 +115,15 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                   title: 'Text Size',
                   subtitle: '${settings.textSize} (Current)',
                   onTap: _showTextSizeSheet,
+                ),
+                _divider(),
+                _settingsTile(
+                  icon: Icons.language_rounded,
+                  title: 'Language',
+                  subtitle: context.watch<LocaleProvider>().isArabic
+                      ? 'العربية'
+                      : 'English',
+                  onTap: _showLanguageSheet,
                 ),
                 _divider(),
                 _settingsTile(
@@ -373,6 +383,59 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                       )),
                 ]),
               )),
+    );
+  }
+
+  // ── Language Sheet ─────────────────────────────────
+  void _showLanguageSheet() {
+    final options = [
+      {'code': 'en', 'label': 'English', 'native': 'English'},
+      {'code': 'ar', 'label': 'Arabic',  'native': 'العربية'},
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _sheetHeader(Icons.language_rounded, 'Language'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: Column(
+              children: options.map((opt) {
+                final isCurrent = context.read<LocaleProvider>().locale.languageCode == opt['code'];
+                return GestureDetector(
+                  onTap: () {
+                    context.read<LocaleProvider>().setLocale(opt['code']!);
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+                    decoration: BoxDecoration(
+                      color: isCurrent ? primaryBg : cardBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: isCurrent ? Border.all(color: primary, width: 1.5) : null,
+                    ),
+                    child: Row(children: [
+                      Text(opt['native']!, style: m(14, isCurrent ? FontWeight.w700 : FontWeight.w600,
+                          isCurrent ? primary : textDark)),
+                      const Spacer(),
+                      if (isCurrent)
+                        Icon(Icons.check_circle_rounded, color: primary, size: 18),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 

@@ -107,6 +107,10 @@ class _HomeElderPageState extends State<HomeElderPage> {
   int _medsTaken = 0;
   int _medsTotal = 0;
 
+  // ── Quick preset messages ────────────────────────────────────────────────
+  bool   _sendingMessage = false;
+  String? _lastSentKey;
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
@@ -415,6 +419,12 @@ class _HomeElderPageState extends State<HomeElderPage> {
     _elderSocket!.connect();
     _elderSocket!.onConnect((_) =>
         _elderSocket!.emit('register_elder', {'elderly_id': elderlyId}));
+
+    // ── Real-time pill update from ESP32 via server ───────────
+    _elderSocket!.on('pill_update', (data) {
+      if (!mounted) return;
+      _fetchPillboxToday(elderlyId);  // refresh slots immediately
+    });
     _elderSocket!.on('voice_message', (data) {
       if (!mounted || data == null) return;
       try {
@@ -452,6 +462,37 @@ class _HomeElderPageState extends State<HomeElderPage> {
         ),
       );
     });
+  }
+
+  // ── Send preset message to caregiver ──────────────────────────────────────
+  Future<void> _sendPresetMessage(String key) async {
+    if (_elderlyId == null || _sendingMessage) return;
+    setState(() { _sendingMessage = true; _lastSentKey = key; });
+    try {
+      final res = await http.post(
+        Uri.parse(ApiConfig.sendPresetMessage),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'elderly_id': _elderlyId, 'message_key': key}),
+      ).timeout(ApiConfig.timeout);
+
+      if (!mounted) return;
+      final ok = res.statusCode == 201;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? 'Message sent ✓' : 'Failed to send message'),
+        backgroundColor: ok ? const Color(0xFF2FA884) : Colors.red,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not send message'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      await Future.delayed(const Duration(seconds: 3));
+      if (mounted) setState(() { _sendingMessage = false; _lastSentKey = null; });
+    }
   }
 
   Future<void> _triggerSos() async {
@@ -659,6 +700,31 @@ class _HomeElderPageState extends State<HomeElderPage> {
 
           const SizedBox(height: 20),
 
+          // ── Quick Preset Messages ────────────────────────────────
+          _sectionTitle('Quick Message', null, null),
+          const SizedBox(height: 10),
+          _whiteCard(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Tap to send a message to your caregiver:',
+                  style: m(12, FontWeight.w500, textGrey)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _presetChip('im_okay',       '😊  I\'m okay'),
+                  _presetChip('need_medicine', '💊  Need medicine'),
+                  _presetChip('hungry',        '🍽️  Hungry'),
+                  _presetChip('tired',         '😴  Tired'),
+                  _presetChip('not_well',      '🤒  Not feeling well'),
+                ],
+              ),
+            ],
+          )),
+
+          const SizedBox(height: 20),
+
           // ── Messages ────────────────────────────────────────────
           _sectionTitle('Messages', null, null),
           const SizedBox(height: 10),
@@ -685,6 +751,31 @@ class _HomeElderPageState extends State<HomeElderPage> {
   }
 
   // ── UI helpers ─────────────────────────────────────────────────────────────
+
+  Widget _presetChip(String key, String label) {
+    final isSending = _sendingMessage && _lastSentKey == key;
+    return GestureDetector(
+      onTap: _sendingMessage ? null : () => _sendPresetMessage(key),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSending ? primary : const Color(0xFFE6F4F0),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isSending ? primary : const Color(0xFF2FA884),
+            width: 1.2,
+          ),
+        ),
+        child: isSending
+            ? const SizedBox(width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Text(label,
+                style: m(12, FontWeight.w600,
+                    _sendingMessage ? textGrey : primary)),
+      ),
+    );
+  }
 
   // ⭐ FIXED: Added Expanded and overflow handling to prevent text overflow
   Widget _heroStatBox(IconData icon, String label, String value) => Container(

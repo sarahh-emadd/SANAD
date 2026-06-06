@@ -276,6 +276,32 @@ async function runMigrations() {
       )
     `);
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // FEATURE: Date-range schedules
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      ALTER TABLE pill_schedules
+        ADD COLUMN IF NOT EXISTS start_date DATE DEFAULT CURRENT_DATE,
+        ADD COLUMN IF NOT EXISTS end_date   DATE DEFAULT NULL
+    `);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FEATURE: Elder quick preset messages
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS elder_messages (
+        id           UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
+        elderly_id   UUID      NOT NULL REFERENCES elderly(id) ON DELETE CASCADE,
+        caregiver_id UUID      REFERENCES caregivers(id) ON DELETE SET NULL,
+        message_key  VARCHAR(50) NOT NULL,
+        message_en   TEXT      NOT NULL,
+        message_ar   TEXT,
+        is_read      BOOLEAN   DEFAULT false,
+        read_at      TIMESTAMP,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     logger.success('✓ DB migrations applied');
   } catch (err) {
     logger.error('Migration error:', err.message);

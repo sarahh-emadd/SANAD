@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/camera_models.dart';
 import '../services/webrtc_service.dart';
 import '../services/events_service.dart';
@@ -49,7 +50,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   bool _isConnecting = false;
   bool _isMuted = false;
   bool _isFullscreen = false;
-  bool _fallDetectionEnabled = true;
+
+  // ── Alert Settings (persisted) ──────────────────────
+  bool _fallDetectionEnabled    = true;
+  bool _inactivityAlertEnabled  = true;
+  bool _sleepingAlertEnabled    = true;
+  int  _inactivityThresholdHrs  = 3; // hours before inactivity alert
 
   // ── Real data state ────────────────────────────────
   TodayStats _todayStats =
@@ -81,6 +87,189 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   ];
 
   // ── Lifecycle ──────────────────────────────────────
+  // ── Load / Save settings ────────────────────────────
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _fallDetectionEnabled   = prefs.getBool('cam_fall_detection') ?? true;
+      _inactivityAlertEnabled = prefs.getBool('cam_inactivity_alert') ?? true;
+      _sleepingAlertEnabled   = prefs.getBool('cam_sleeping_alert') ?? true;
+      _inactivityThresholdHrs = prefs.getInt('cam_inactivity_hrs') ?? 3;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('cam_fall_detection',   _fallDetectionEnabled);
+    await prefs.setBool('cam_inactivity_alert', _inactivityAlertEnabled);
+    await prefs.setBool('cam_sleeping_alert',   _sleepingAlertEnabled);
+    await prefs.setInt('cam_inactivity_hrs',    _inactivityThresholdHrs);
+  }
+
+  void _openSettings() {
+    bool fall      = _fallDetectionEnabled;
+    bool inact     = _inactivityAlertEnabled;
+    bool sleeping  = _sleepingAlertEnabled;
+    int  threshold = _inactivityThresholdHrs;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20, right: 20, top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Handle
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFEEEEEE),
+                    borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            Text('Alert Settings', style: m(16, FontWeight.w700, textDark)),
+            const SizedBox(height: 4),
+            Text('Choose which alerts to receive from the camera',
+                style: m(12, FontWeight.w400, textGrey)),
+            const SizedBox(height: 20),
+
+            // Fall Detection
+            _settingsToggle(
+              icon: Icons.warning_amber_rounded,
+              iconColor: dangerRed,
+              label: 'Fall Detection',
+              subtitle: 'Alert when a fall is detected',
+              value: fall,
+              onChanged: (v) => setS(() => fall = v),
+            ),
+            const SizedBox(height: 12),
+
+            // Inactivity Alert
+            _settingsToggle(
+              icon: Icons.do_not_disturb_on_outlined,
+              iconColor: warnOrange,
+              label: 'Inactivity Alert',
+              subtitle: 'Alert when no movement detected',
+              value: inact,
+              onChanged: (v) => setS(() => inact = v),
+            ),
+
+            // Inactivity threshold
+            if (inact) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(children: [
+                  Text('Alert after: ', style: m(12, FontWeight.w500, textGrey)),
+                  const Spacer(),
+                  ...[ 1, 2, 3, 4 ].map((h) => GestureDetector(
+                    onTap: () => setS(() => threshold = h),
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: threshold == h ? primary : const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('${h}h',
+                        style: m(12, FontWeight.w700,
+                            threshold == h ? Colors.white : textGrey)),
+                    ),
+                  )),
+                ]),
+              ),
+            ],
+            const SizedBox(height: 12),
+
+            // Sleeping Alert
+            _settingsToggle(
+              icon: Icons.bedtime_outlined,
+              iconColor: infoBlue,
+              label: 'Sleeping Alert',
+              subtitle: 'Alert when sleeping at unusual hours',
+              value: sleeping,
+              onChanged: (v) => setS(() => sleeping = v),
+            ),
+            const SizedBox(height: 24),
+
+            // Save
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _fallDetectionEnabled   = fall;
+                    _inactivityAlertEnabled = inact;
+                    _sleepingAlertEnabled   = sleeping;
+                    _inactivityThresholdHrs = threshold;
+                  });
+                  await _saveSettings();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Settings saved ✓'),
+                      backgroundColor: primary,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('Save Settings',
+                    style: m(14, FontWeight.w700, Colors.white)),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsToggle({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        borderRadius: BorderRadius.circular(14)),
+    child: Row(children: [
+      Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: m(13, FontWeight.w600, textDark)),
+        Text(subtitle, style: m(11, FontWeight.w400, textGrey)),
+      ])),
+      Switch(
+        value: value,
+        onChanged: onChanged,
+        activeColor: primary,
+      ),
+    ]),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -171,6 +360,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
     _initRenderer();
     _loadTodayStats();
+    _loadSettings();
   }
 
   Future<void> _initRenderer() async {
@@ -336,7 +526,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         actions: [
           IconButton(
               icon: const Icon(Icons.settings_outlined, color: textDark),
-              onPressed: () {})
+              onPressed: _openSettings)
         ],
       ),
       body: SingleChildScrollView(
@@ -490,69 +680,43 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Alert Settings ───────────────────────────
+          // ── Alert Settings summary ───────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
                 color: primaryBg, borderRadius: BorderRadius.circular(18)),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Alert Settings', style: m(15, FontWeight.w700, textDark)),
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Fall Detection',
-                          style: m(13, FontWeight.w600, textDark)),
-                      GestureDetector(
-                        onTap: () => setState(() =>
-                            _fallDetectionEnabled = !_fallDetectionEnabled),
-                        child: Text(
-                          _fallDetectionEnabled ? 'Enabled' : 'Disabled',
-                          style: m(13, FontWeight.w700,
-                              _fallDetectionEnabled ? primary : textGrey),
-                        ),
-                      ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text('Alert Settings', style: m(15, FontWeight.w700, textDark)),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _openSettings,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                        color: primary, borderRadius: BorderRadius.circular(8)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.edit, color: Colors.white, size: 13),
+                      const SizedBox(width: 4),
+                      Text('Edit', style: m(11, FontWeight.w700, Colors.white)),
                     ]),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Inactivity Alert',
-                          style: m(13, FontWeight.w600, textDark)),
-                      Text('After 3 Hours',
-                          style: m(13, FontWeight.w700, primary)),
-                    ]),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: Text('Save', style: m(14, FontWeight.w700, textDark)),
                 ),
-              ),
+              ]),
+              const SizedBox(height: 12),
+              _settingsSummaryRow(Icons.warning_amber_rounded, dangerRed,
+                  'Fall Detection', _fallDetectionEnabled ? 'Enabled' : 'Disabled',
+                  _fallDetectionEnabled),
+              const SizedBox(height: 8),
+              _settingsSummaryRow(Icons.do_not_disturb_on_outlined, warnOrange,
+                  'Inactivity Alert',
+                  _inactivityAlertEnabled ? 'After ${_inactivityThresholdHrs}h' : 'Disabled',
+                  _inactivityAlertEnabled),
+              const SizedBox(height: 8),
+              _settingsSummaryRow(Icons.bedtime_outlined, infoBlue,
+                  'Sleeping Alert', _sleepingAlertEnabled ? 'Enabled' : 'Disabled',
+                  _sleepingAlertEnabled),
             ]),
           ),
 
@@ -788,6 +952,22 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
               ])),
         ]),
       );
+
+  Widget _settingsSummaryRow(IconData icon, Color iconColor,
+      String label, String value, bool enabled) =>
+    Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        Icon(icon, color: enabled ? iconColor : textGrey, size: 18),
+        const SizedBox(width: 10),
+        Text(label, style: m(13, FontWeight.w600, textDark)),
+        const Spacer(),
+        Text(value,
+            style: m(12, FontWeight.w700, enabled ? primary : textGrey)),
+      ]),
+    );
 
   Widget _buildHistoryCard(HistoryItem h) {
     Color borderColor;

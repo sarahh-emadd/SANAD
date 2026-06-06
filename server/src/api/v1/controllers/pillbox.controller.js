@@ -18,6 +18,7 @@
 
 const pillboxService      = require('../../../services/pillbox.service');
 const notificationService = require('../../../services/notification.service');
+const socketService       = require('../../../services/socket.service');
 const ApiResponse         = require('../../../utils/ApiResponse');
 const ApiError            = require('../../../utils/ApiError');
 const asyncHandler        = require('../../../utils/asyncHandler');
@@ -64,12 +65,12 @@ const updateSlot = asyncHandler(async (req, res) => {
  * @body   { slot_id, elderly_id, time: 'HH:MM', label }
  */
 const addSchedule = asyncHandler(async (req, res) => {
-  const { slot_id, elderly_id, time, label } = req.body;
+  const { slot_id, elderly_id, time, label, start_date, end_date } = req.body;
   if (!slot_id || !elderly_id || !time) {
     throw new ApiError(400, 'slot_id, elderly_id, and time are required');
   }
 
-  const schedule = await pillboxService.addSchedule(slot_id, elderly_id, time, label);
+  const schedule = await pillboxService.addSchedule(slot_id, elderly_id, time, label, start_date, end_date);
   res.status(201).json(new ApiResponse(201, { schedule }, 'Schedule added'));
 });
 
@@ -203,6 +204,18 @@ const reportDose = asyncHandler(async (req, res) => {
   );
 
   logger.info(`💊 Dose ${status}: slot ${slot_number} | elderly ${elderly_id}`);
+
+  // ── Emit real-time socket update to elder + caregiver rooms ──────────────
+  const io = req.app.get('io');
+  if (io) {
+    socketService.emitPillUpdate(io, elderly_id, {
+      slot_number,
+      slot_id,
+      status,
+      scheduled_at,
+      log_id: log?.id,
+    });
+  }
 
   // Send FCM notification to caregiver (non-blocking)
   pillboxService.getCaregiverFcm(elderly_id)

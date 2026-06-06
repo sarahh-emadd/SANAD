@@ -169,7 +169,8 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
     await _loadSlots();
   }
 
-  Future<void> _addSchedule(String slotId, String time, String label, {String? scheduleId}) async {
+  Future<void> _addSchedule(String slotId, String time, String label,
+      {String? scheduleId, String? startDate, String? endDate}) async {
     final token = await _token();
     if (token == null) return;
 
@@ -189,6 +190,8 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
         'elderly_id': widget.elderlyId,
         'time':       time,
         'label':      label,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate   != null) 'end_date':   endDate,
       }),
     ).timeout(ApiConfig.timeout);
 
@@ -306,9 +309,19 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
     );
   }
 
-  Future<void> _showAddScheduleDialog(String slotId, {String? existingScheduleId, TimeOfDay? existingTime, String? existingLabel}) async {
-    TimeOfDay time  = existingTime ?? const TimeOfDay(hour: 8, minute: 0);
-    String    label = existingLabel ?? _labelOptions[0];
+  Future<void> _showAddScheduleDialog(String slotId,
+      {String? existingScheduleId,
+      TimeOfDay? existingTime,
+      String? existingLabel,
+      DateTime? existingStartDate,
+      DateTime? existingEndDate}) async {
+    TimeOfDay time      = existingTime  ?? const TimeOfDay(hour: 8, minute: 0);
+    String    label     = existingLabel ?? _labelOptions[0];
+    DateTime  startDate = existingStartDate ?? DateTime.now();
+    DateTime? endDate   = existingEndDate;
+
+    String _fmtDate(DateTime d) =>
+        '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
 
     await showModalBottomSheet(
       context: context,
@@ -324,119 +337,190 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
             return '$h:$m';
           }
 
+          Widget _dateRow(String label2, DateTime? date, VoidCallback onTap, bool isEnd) =>
+              GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: date != null ? _primaryBg : const Color(0xFFF7F7F7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: date != null ? _primary : _cardBorder, width: 1.2),
+                  ),
+                  child: Row(children: [
+                    Icon(isEnd ? Icons.event_available_outlined : Icons.calendar_today_outlined,
+                        color: date != null ? _primary : _textGrey, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(
+                      date != null ? '${label2}: ${_fmtDate(date)}' : label2,
+                      style: _m(13, FontWeight.w600,
+                          date != null ? _primary : _textGrey),
+                    )),
+                    if (isEnd && date != null)
+                      GestureDetector(
+                        onTap: () => setS(() => endDate = null),
+                        child: const Icon(Icons.close, color: _textGrey, size: 16),
+                      ),
+                    if (!isEnd || date == null)
+                      const Icon(Icons.edit, color: _textGrey, size: 14),
+                  ]),
+                ),
+              );
+
           return Padding(
             padding: EdgeInsets.only(
               left: 20, right: 20, top: 20,
               bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40, height: 4,
-                    decoration: BoxDecoration(
-                      color: _textGrey.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(
+                        color: _textGrey.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text('Add Schedule', style: _m(16, FontWeight.w700, _textDark)),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  Text(existingScheduleId != null ? 'Edit Schedule' : 'Add Schedule',
+                      style: _m(16, FontWeight.w700, _textDark)),
+                  const SizedBox(height: 20),
 
-                // Time picker row
-                GestureDetector(
-                  onTap: () async {
-                    final picked = await showTimePicker(
+                  // Time picker row
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: time,
+                        builder: (c, child) => Theme(
+                          data: Theme.of(c).copyWith(
+                            colorScheme: const ColorScheme.light(
+                              primary: _primary, onPrimary: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        ),
+                      );
+                      if (picked != null) setS(() => time = picked);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: _primaryBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.access_time, color: _primary, size: 20),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod}'
+                          ':${time.minute.toString().padLeft(2, '0')} '
+                          '${time.period == DayPeriod.am ? 'AM' : 'PM'}',
+                          style: _m(14, FontWeight.w600, _primary),
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.edit, color: _primary, size: 16),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Start date picker
+                  _dateRow('Start Date', startDate, () async {
+                    final picked = await showDatePicker(
                       context: ctx,
-                      initialTime: time,
+                      initialDate: startDate,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime(2030),
                       builder: (c, child) => Theme(
                         data: Theme.of(c).copyWith(
                           colorScheme: const ColorScheme.light(
-                            primary: _primary, onPrimary: Colors.white,
-                          ),
-                        ),
+                              primary: _primary, onPrimary: Colors.white)),
                         child: child!,
                       ),
                     );
-                    if (picked != null) setS(() => time = picked);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: _primaryBg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.access_time,
-                          color: _primary, size: 20),
-                      const SizedBox(width: 10),
-                      Text(
-                        '${time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod}'
-                        ':${time.minute.toString().padLeft(2, '0')} '
-                        '${time.period == DayPeriod.am ? 'AM' : 'PM'}',
-                        style: _m(14, FontWeight.w600, _primary),
-                      ),
-                      const Spacer(),
-                      const Icon(Icons.edit, color: _primary, size: 16),
-                    ]),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    if (picked != null) setS(() => startDate = picked);
+                  }, false),
+                  const SizedBox(height: 8),
 
-                // Label chips
-                Text('Label', style: _m(13, FontWeight.w600, _textGrey)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: _labelOptions.map((opt) {
-                    final sel = opt == label;
-                    return GestureDetector(
-                      onTap: () => setS(() => label = opt),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: sel ? _primary : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: sel ? _primary : _cardBorder),
-                        ),
-                        child: Text(
-                          opt,
-                          style: _m(11, FontWeight.w600,
-                              sel ? Colors.white : _textGrey),
-                        ),
+                  // End date picker (optional)
+                  _dateRow('End Date (optional — leave empty for ongoing)', endDate, () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: endDate ?? startDate.add(const Duration(days: 7)),
+                      firstDate: startDate,
+                      lastDate: DateTime(2030),
+                      builder: (c, child) => Theme(
+                        data: Theme.of(c).copyWith(
+                          colorScheme: const ColorScheme.light(
+                              primary: _primary, onPrimary: Colors.white)),
+                        child: child!,
                       ),
                     );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
+                    if (picked != null) setS(() => endDate = picked);
+                  }, true),
+                  const SizedBox(height: 16),
 
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      await _addSchedule(slotId, hhmm(), label, scheduleId: existingScheduleId);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Text('Add Schedule',
-                        style: _m(14, FontWeight.w700, Colors.white)),
+                  // Label chips
+                  Text('Label', style: _m(13, FontWeight.w600, _textGrey)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: _labelOptions.map((opt) {
+                      final sel = opt == label;
+                      return GestureDetector(
+                        onTap: () => setS(() => label = opt),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: sel ? _primary : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: sel ? _primary : _cardBorder),
+                          ),
+                          child: Text(opt,
+                            style: _m(11, FontWeight.w600,
+                                sel ? Colors.white : _textGrey)),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ),
-              ],
-            ),
-          );
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final startStr = '${startDate.year}-${startDate.month.toString().padLeft(2,'0')}-${startDate.day.toString().padLeft(2,'0')}';
+                        final endStr   = endDate == null ? null :
+                            '${endDate!.year}-${endDate!.month.toString().padLeft(2,'0')}-${endDate!.day.toString().padLeft(2,'0')}';
+                        Navigator.pop(ctx);
+                        await _addSchedule(slotId, hhmm(), label,
+                            scheduleId: existingScheduleId,
+                            startDate: startStr,
+                            endDate: endStr);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        existingScheduleId != null ? 'Save Changes' : 'Add Schedule',
+                        style: _m(14, FontWeight.w700, Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),  // SingleChildScrollView
+          );   // Padding
         },
       ),
     );
@@ -684,11 +768,18 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
                       hour: int.parse(timeParts[0]),
                       minute: int.parse(timeParts[1]),
                     );
+                    // Parse existing date range if present
+                    final startStr = sc['start_date'] as String?;
+                    final endStr   = sc['end_date']   as String?;
+                    final existStart = startStr != null ? DateTime.tryParse(startStr) : null;
+                    final existEnd   = endStr   != null ? DateTime.tryParse(endStr)   : null;
                     _showAddScheduleDialog(
                       slot['id'] as String,
                       existingScheduleId: sc['id'] as String,
-                      existingTime: existing,
+                      existingTime:  existing,
                       existingLabel: sc['label'] as String?,
+                      existingStartDate: existStart,
+                      existingEndDate:   existEnd,
                     );
                   },
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -720,12 +811,28 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
   }
 
   Widget _buildScheduleRow(String slotId, Map<String, dynamic> sc) {
-    final time  = _formatTime(sc['scheduled_time'] as String);
-    final label = sc['label'] as String? ?? '';
+    final time      = _formatTime(sc['scheduled_time'] as String);
+    final label     = sc['label'] as String? ?? '';
+    final startStr  = sc['start_date'] as String?;
+    final endStr    = sc['end_date']   as String?;
+
+    String _shortDate(String iso) {
+      final d = DateTime.tryParse(iso);
+      if (d == null) return iso;
+      return '${d.day}/${d.month}/${d.year}';
+    }
+
+    String? dateRange;
+    if (startStr != null || endStr != null) {
+      final s = startStr != null ? _shortDate(startStr) : 'today';
+      final e = endStr   != null ? _shortDate(endStr)   : '∞';
+      dateRange = '$s → $e';
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
@@ -769,7 +876,16 @@ class _ManagePillsScreenState extends State<ManagePillsScreen>
           },
           child: const Icon(Icons.close, color: _dangerRed, size: 18),
         ),
-      ]),
+        ]),  // end Row
+        if (dateRange != null) ...[
+          const SizedBox(height: 4),
+          Row(children: [
+            const Icon(Icons.date_range_outlined, color: _textGrey, size: 12),
+            const SizedBox(width: 4),
+            Text(dateRange, style: _m(10, FontWeight.w500, _textGrey)),
+          ]),
+        ],
+      ]),  // end Column
     );
   }
 

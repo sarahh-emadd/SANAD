@@ -6,6 +6,8 @@ const offlineDetectionJob = require('./offlineDetection.job');
 const deviceHealthJob = require('./deviceHealth.job');
 const dataCleanupJob = require('./dataCleanup.job');
 const sosEscalationJob = require('./sosEscalation.job');
+const weeklyReportJob = require('./weeklyReport.job');
+const scheduleExpiryJob = require('./scheduleExpiry.job');
 
 const initializeJobs = () => {
   logger.info('🕐 Initializing scheduled jobs...');
@@ -59,6 +61,20 @@ const initializeJobs = () => {
     try { await sosEscalationJob(); } catch (error) { logger.error('[CRON] SOS Escalation error:', error); }
   });
   logger.info('  ✓ SOS Escalation Job scheduled (every minute)');
+
+  // Schedule Expiry - Daily at midnight
+  cron.schedule('0 0 * * *', async () => {
+    logger.info('[CRON] Schedule Expiry Job triggered');
+    try { await scheduleExpiryJob(); } catch (error) { logger.error('[CRON] Schedule Expiry error:', error); }
+  });
+  logger.info('  ✓ Schedule Expiry Job scheduled (daily at midnight)');
+
+  // Weekly Health Report — Every Sunday at 08:00
+  cron.schedule('0 8 * * 0', async () => {
+    logger.info('[CRON] Weekly Report Job triggered');
+    try { await weeklyReportJob(); } catch (error) { logger.error('[CRON] Weekly Report error:', error); }
+  });
+  logger.info('  ✓ Weekly Report Job scheduled (Sundays at 08:00)');
 
   logger.info('✓ All scheduled jobs initialized');
 };

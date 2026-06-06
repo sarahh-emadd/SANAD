@@ -40,7 +40,9 @@ class PillboxService {
                    'id',             sc.id,
                    'scheduled_time', TO_CHAR(sc.scheduled_time, 'HH24:MI'),
                    'label',          sc.label,
-                   'is_active',      sc.is_active
+                   'is_active',      sc.is_active,
+                   'start_date',     sc.start_date,
+                   'end_date',       sc.end_date
                  ) ORDER BY sc.scheduled_time
                ) FILTER (WHERE sc.id IS NOT NULL),
                '[]'
@@ -85,39 +87,46 @@ class PillboxService {
    * time    — 'HH:MM' string  (e.g. '08:00')
    * label   — 'After Breakfast', 'After Dinner', …
    */
-  async addSchedule(slotId, elderlyId, time, label) {
+  async addSchedule(slotId, elderlyId, time, label, startDate, endDate) {
     const result = await pool.query(`
-      INSERT INTO pill_schedules (slot_id, elderly_id, scheduled_time, label)
-      VALUES ($1, $2, $3::TIME, $4)
+      INSERT INTO pill_schedules (slot_id, elderly_id, scheduled_time, label, start_date, end_date)
+      VALUES ($1, $2, $3::TIME, $4, $5::DATE, $6::DATE)
       RETURNING id,
                 slot_id,
                 TO_CHAR(scheduled_time, 'HH24:MI') AS scheduled_time,
                 label,
                 is_active,
+                start_date,
+                end_date,
                 created_at
-    `, [slotId, elderlyId, time, label ?? null]);
+    `, [slotId, elderlyId, time, label ?? null, startDate ?? null, endDate ?? null]);
 
-    logger.info(`⏰ Schedule added: slot ${slotId} @ ${time}`);
+    logger.info(`⏰ Schedule added: slot ${slotId} @ ${time} (${startDate ?? 'today'} → ${endDate ?? 'ongoing'})`);
     return result.rows[0];
   }
 
   /**
    * Update an existing schedule's time and/or label.
    */
-  async updateSchedule(scheduleId, { time, label, is_active }) {
+  async updateSchedule(scheduleId, { time, label, is_active, start_date, end_date }) {
     const result = await pool.query(`
       UPDATE pill_schedules
       SET scheduled_time = COALESCE($2::TIME, scheduled_time),
           label          = COALESCE($3, label),
           is_active      = COALESCE($4, is_active),
+          start_date     = COALESCE($5::DATE, start_date),
+          end_date       = $6::DATE,
           updated_at     = NOW()
       WHERE id = $1
       RETURNING id,
                 slot_id,
                 TO_CHAR(scheduled_time, 'HH24:MI') AS scheduled_time,
                 label,
-                is_active
-    `, [scheduleId, time ?? null, label ?? null, is_active ?? null]);
+                is_active,
+                start_date,
+                end_date
+    `, [scheduleId, time ?? null, label ?? null, is_active ?? null,
+        start_date ?? null, end_date ?? null]);
 
     if (!result.rows[0]) throw new Error('Schedule not found');
     return result.rows[0];
@@ -164,6 +173,8 @@ class PillboxService {
       WHERE sc.elderly_id = $1
         AND sc.is_active  = true
         AND ps.is_active  = true
+        AND (sc.start_date IS NULL OR sc.start_date <= CURRENT_DATE)
+        AND (sc.end_date   IS NULL OR sc.end_date   >= CURRENT_DATE)
       ORDER BY sc.scheduled_time
     `, [elderlyId]);
 

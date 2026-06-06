@@ -451,4 +451,28 @@ function emitSosAlert(io, caregiverId, payload) {
   logger.info(`🆘 Socket SOS → caregiver: ${caregiverId}`);
 }
 
-module.exports = { init, emitAlert, emitSosAlert, connectedSessions };
+function emitPillUpdate(io, elderlyId, payload) {
+  // Notify elder room (elder home screen)
+  io.to(`elder_${elderlyId}`).emit('pill_update', {
+    sender_id: 'server',
+    elderly_id: elderlyId,
+    ...payload,
+  });
+  // Also notify caregiver room — look up caregiver_id from active sessions
+  for (const [, session] of connectedSessions.entries()) {
+    if ((session.user_type === 'elder_app' || session.user_type === 'camera')
+        && session.elderly_id === elderlyId
+        && session.caregiver_id) {
+      io.to(`caregiver_${session.caregiver_id}`).emit('pill_update', {
+        sender_id: 'server',
+        elderly_id: elderlyId,
+        ...payload,
+      });
+      logger.info(`💊 pill_update → caregiver_${session.caregiver_id} | elder_${elderlyId}`);
+      break;
+    }
+  }
+  logger.info(`💊 pill_update → elder_${elderlyId} | slot ${payload.slot_number} → ${payload.status}`);
+}
+
+module.exports = { init, emitAlert, emitSosAlert, emitPillUpdate, connectedSessions };
