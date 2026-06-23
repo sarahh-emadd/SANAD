@@ -126,8 +126,10 @@ git commit -m "Description of changes"
 git push origin feature/your-feature-name
 ```
 
-## 📄 License
-[Add your license here]
 
 ## 👨‍💻 Contributors
-[Add team members]
+Sarah Emad
+Raheem Bassem
+Rana Ahmed
+Shuruq Adel
+Clair Aany
